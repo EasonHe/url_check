@@ -200,21 +200,90 @@ send_to = ["admin@example.com"]
 ### PromQL 判断示例
 
 ```promql
-# 状态码告警
+# 状态码告警（Gauge 直接判断）
 url_check_http_status_code != 200
 
-# 响应时间告警
+# 响应时间告警（Histogram 需要使用 >）
 url_check_http_response_time_ms > 1000
 
-# 关键字告警
-url_check_http_contents =~ ""  # 关键字不匹配
+# 关键字告警（使用正则匹配）
+url_check_http_contents_info{body!~".*(success|ok).*"}
 
 # JSON 解析失败
 url_check_json_valid == 0
 
 # JSON Path 不匹配
 url_check_json_path_match == 0
+
+# 超时告警（Counter 需要使用 rate() 或 increase()）
+# 方式1：最近 5 分钟有超时发生（推荐）
+rate(url_check_http_timeout_total[5m]) > 0
+
+# 方式2：最近 5 分钟超时次数增加
+increase(url_check_http_timeout_total[5m]) > 0
+
+# 方式3：超时率
+rate(url_check_http_timeout_total[5m]) > 0.1
 ```
+
+### PrometheusAlertmanager 告警规则示例
+
+```yaml
+groups:
+  - name: url-check-alerts
+    rules:
+      # 状态码告警
+      - alert: URLCheckStatusCodeFailed
+        expr: url_check_http_status_code{task_name="api-health"} != 200
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.task_name }} 状态码异常: {{ $value }}"
+          description: "期望状态码 200，实际 {{ $value }}"
+
+      # 响应时间告警
+      - alert: URLCheckSlowResponse
+        expr: url_check_http_response_time_ms{task_name="api-health"} > 1000
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.task_name }} 响应时间过长"
+          description: "响应时间 {{ $value }}ms，超过阈值 1000ms"
+
+      # 超时告警
+      - alert: URLCheckTimeout
+        expr: rate(url_check_http_timeout_total{task_name="api-health"}[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.task_name }} 发生超时"
+          description: "最近 5 分钟内发生超时"
+
+      # JSON 解析失败
+      - alert: URLCheckJSONParseFailed
+        expr: url_check_json_valid{task_name="api-health"} == 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.task_name }} JSON 解析失败"
+
+      # JSON Path 不匹配
+      - alert: URLCheckJSONPathMismatch
+        expr: url_check_json_path_match{task_name="api-health"} == 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.task_name }} JSON Path 验证失败"
+```
+
+### 指标类型与判断方式
+
+| 指标类型 | 指标示例 | 正确判断方式 |
+|----------|----------|--------------|
+| Gauge | `url_check_http_status_code` | `!= 200` |
+| Histogram | `url_check_http_response_time_ms` | `> 1000` |
+| Counter | `url_check_http_timeout_total` | `rate(...[5m]) > 0` |
+| Info | `url_check_http_contents_info` | `=~".*pattern.*"` |
 
 ### 聚合指标（兼容旧版）
 
