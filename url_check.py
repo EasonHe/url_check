@@ -59,6 +59,10 @@ def task_opt():
         return 'ok'
     return '{} False'.format(data)
 
+@app.route('/health')
+def health():
+    return {'status': 'ok', 'flask': '2.3.3', 'uv': '0.9.28'}
+
 if __name__ == '__main__':
 
     app.run(host="127.0.0.1", port=4000, debug=False)
