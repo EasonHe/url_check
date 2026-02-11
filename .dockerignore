@@ -1,0 +1,32 @@
+# Development & system files
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+pip-log.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.DS_Store
+
+# Data & local artifacts
+data/
+*.pkl
+*.db
+*.sqlite
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
