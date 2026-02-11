@@ -177,15 +177,54 @@ send_to = ["admin@example.com"]
 
 ## Prometheus 指标
 
+### 混合方案分工
+
+| 验证类型 | 处理位置 | 说明 |
+|----------|----------|------|
+| 状态码 | Prometheus | 原始数据采集，PromQL 判断 |
+| 响应时间 | Prometheus | 原始数据采集，PromQL 判断 |
+| 关键字匹配 | Prometheus | 原始内容采集，PromQL 正则 |
+| JSON 结构化 | 应用层 | Prometheus 难以处理 JSON Path |
+
+### 原始数据指标（Prometheus 判断用）
+
+| 指标 | 类型 | 说明 |
+|------|------|------|
+| `url_check_http_status_code` | Gauge | HTTP 状态码（数值） |
+| `url_check_http_response_time_ms` | Histogram | 响应时间（毫秒） |
+| `url_check_http_contents` | Info | 响应内容（截断） |
+| `url_check_http_timeout_total` | Counter | 超时次数 |
+| `url_check_json_valid` | Gauge | JSON 解析结果 (1=valid, 0=invalid) |
+| `url_check_json_path_match` | Gauge | JSON Path 匹配结果 (1=match, 0=no match) |
+
+### PromQL 判断示例
+
+```promql
+# 状态码告警
+url_check_http_status_code != 200
+
+# 响应时间告警
+url_check_http_response_time_ms > 1000
+
+# 关键字告警
+url_check_http_contents =~ ""  # 关键字不匹配
+
+# JSON 解析失败
+url_check_json_valid == 0
+
+# JSON Path 不匹配
+url_check_json_path_match == 0
+```
+
+### 聚合指标（兼容旧版）
+
 | 指标 | 类型 | 说明 |
 |------|------|------|
 | `url_check_success_total` | Counter | 检查成功次数 |
 | `url_check_timeout_total` | Counter | 超时次数 |
-| `url_check_response_time_seconds` | Histogram | 响应时间分布 |
+| `url_check_response_time_seconds` | Histogram | 响应时间分布（秒） |
 | `url_check_ssl_expiry_days` | Gauge | SSL 证书剩余天数 |
 | `url_check_ssl_verified` | Counter | SSL 验证状态 |
-| `url_check_json_valid` | Counter | JSON 解析结果 |
-| `url_check_json_path` | Counter | JSON Path 匹配结果 |
 
 ## 目录结构
 

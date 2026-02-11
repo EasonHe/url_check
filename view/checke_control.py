@@ -4,7 +4,7 @@ import datetime
 import logging
 import ssl
 from datetime import timedelta
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Histogram, Gauge, Info
 from view.mail_server import mailconf
 from view.dingding import ding_sender
 from conf import config
@@ -14,16 +14,58 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Prometheus 指标定义
 # =============================================================================
+# 指标分类：
+#   - 原始数据指标：供 Prometheus/PromQL 判断
+#   - 聚合指标：方便快速查看
 
+# 原始数据指标（Prometheus 判断用）
+url_check_http_status_code = Gauge(
+    "url_check_http_status_code",
+    "HTTP status code from URL check",
+    ["task_name", "method"],
+)
+
+url_check_http_response_time_ms = Histogram(
+    "url_check_http_response_time_ms",
+    "HTTP response time in milliseconds",
+    ["task_name", "method"],
+    buckets=(10, 50, 100, 200, 300, 500, 1000, 2000, 5000),
+)
+
+url_check_http_contents = Info(
+    "url_check_http_contents",
+    "HTTP response contents (truncated)",
+    ["task_name", "method"],
+)
+
+url_check_http_timeout = Counter(
+    "url_check_http_timeout_total",
+    "Total number of HTTP timeouts",
+    ["task_name", "method"],
+)
+
+url_check_json_valid = Gauge(
+    "url_check_json_valid",
+    "JSON parsing result (1=valid, 0=invalid)",
+    ["task_name", "method"],
+)
+
+url_check_json_path_match = Gauge(
+    "url_check_json_path_match",
+    "JSON path match result (1=match, 0=no match)",
+    ["task_name", "method"],
+)
+
+# 聚合指标（方便查看）
 url_check_success_total = Counter(
     "url_check_success_total",
-    "Total number of URL check requests",
+    "Total number of successful URL checks",
     ["task_name", "status_code", "method"],
 )
 
 url_check_response_time_seconds = Histogram(
     "url_check_response_time_seconds",
-    "URL check response time in seconds",
+    "URL check response time in seconds (deprecated, use url_check_http_response_time_ms)",
     ["task_name", "method"],
     buckets=(0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.0, 5.0),
 )
@@ -34,40 +76,16 @@ url_check_timeout_total = Counter(
     ["task_name", "method"],
 )
 
-# url_check_ssl_expiry_days: SSL 证书剩余天数
-# 标签: task_name, method
-# 用法: 当剩余天数小于 warning_days 时告警
 url_check_ssl_expiry_days = Gauge(
     "url_check_ssl_expiry_days",
     "SSL certificate expiry days remaining",
     ["task_name", "method"],
 )
 
-# url_check_ssl_verified: SSL 证书验证状态
-# 标签: task_name, method, verified ("true" / "false")
-# 用法: 区分是否跳过 SSL 验证
 url_check_ssl_verified = Counter(
     "url_check_ssl_verified",
     "SSL certificate verification status",
     ["task_name", "method", "verified"],
-)
-
-# url_check_json_valid: JSON 解析结果
-# 标签: task_name, method, status ("success" / "failed")
-# 用法: 统计 JSON 解析成功率
-url_check_json_valid = Counter(
-    "url_check_json_valid",
-    "JSON validation results",
-    ["task_name", "method", "status"],
-)
-
-# url_check_json_path: JSON Path 验证结果
-# 标签: task_name, method, matched ("true" / "false")
-# 用法: 统计 JSON Path 字段匹配成功率
-url_check_json_path = Counter(
-    "url_check_json_path",
-    "JSON Path validation results",
-    ["task_name", "method", "matched"],
 )
 
 
@@ -148,16 +166,10 @@ class cherker:
         json_path_ok = False
         json_data = None
 
-        url_check_json_valid.labels(
-            task_name=self.task_name or "", method=self.method or "", status="pending"
-        )
-
         if not expect_json:
             url_check_json_valid.labels(
-                task_name=self.task_name or "",
-                method=self.method or "",
-                status="skipped",
-            ).inc()
+                task_name=self.task_name or "", method=self.method or ""
+            ).set(0)
             return True, True
 
         try:
@@ -166,16 +178,12 @@ class cherker:
             json_data = json.loads(content)
             json_parse_ok = True
             url_check_json_valid.labels(
-                task_name=self.task_name or "",
-                method=self.method or "",
-                status="success",
-            ).inc()
+                task_name=self.task_name or "", method=self.method or ""
+            ).set(1)
         except (json.JSONDecodeError, TypeError):
             url_check_json_valid.labels(
-                task_name=self.task_name or "",
-                method=self.method or "",
-                status="failed",
-            ).inc()
+                task_name=self.task_name or "", method=self.method or ""
+            ).set(0)
             return False, False
 
         if not json_path_expr:
@@ -215,11 +223,9 @@ class cherker:
             logger.warning(f"JSON Path 验证失败: {json_path_expr}, 错误: {e}")
             json_path_ok = False
 
-        url_check_json_path.labels(
-            task_name=self.task_name or "",
-            method=self.method or "",
-            matched=str(json_path_ok).lower(),
-        ).inc()
+        url_check_json_path_match.labels(
+            task_name=self.task_name or "", method=self.method or ""
+        ).set(1 if json_path_ok else 0)
 
         return json_parse_ok, json_path_ok
 
@@ -393,35 +399,17 @@ class cherker:
         处理 URL 检查结果数据
 
         功能：
-            1. 从 data_dict 提取检查结果（状态码、响应时间、超时等）
-            2. 与配置阈值对比，判定各项检查是否通过
-            3. 验证 JSON 响应（如果配置了 expect_json）
-            4. 持久化结果到 pickle 文件
-            5. 触发告警（钉钉通知）
-            6. 更新 Prometheus 指标
+            1. 提取检查结果数据
+            2. 全部验证（要数据说话）
+            3. 暴露原始数据指标供 Prometheus 判断
+            4. 应用层只做 JSON 结构化验证（Prometheus 难以处理）
+
+        混合方案分工：
+            - Prometheus 判断：状态码、响应时间、关键字（PromQL）
+            - 应用层判断：JSON 结构化验证（json_path + json_path_value）
 
         Args:
-            data_dict: URL 检查结果字典，包含以下字段：
-                - url_name: 任务名称
-                - url: 检查的 URL
-                - stat_code: HTTP 状态码
-                - timeout: 是否超时（0=否，1=是）
-                - resp_time: 响应时间（毫秒）
-                - contents: 响应内容
-                - time: 检查时间
-                - threshold: 配置阈值字典
-                - expect_json: 是否期望 JSON 响应
-                - json_path: JSON Path 表达式
-
-        成功/失败判定逻辑：
-            - 成功：timeout=0 且 stat_code == threshold['stat_code']
-            - 失败（任一即失败）：
-                * stat_code != threshold['stat_code']（状态码不匹配）
-                * timeout == 1（请求超时）
-                * stat_math_str == 1（关键字未匹配）
-                * stat_delay == 1（响应时间超阈值）
-                * json_parse_ok == False（JSON 解析失败）
-                * json_path_ok == False（JSON Path 验证失败）
+            data_dict: URL 检查结果字典
         """
         self.task_name = data_dict["url_name"]
         time = data_dict["time"]
@@ -430,20 +418,34 @@ class cherker:
         json_path = data_dict.get("json_path")
         json_path_value = data_dict.get("json_path_value")
 
+        method = self.method or "unknown"
+
+        # ==========================================================================
+        # 1. 暴露原始数据指标（供 Prometheus 判断）
+        # ==========================================================================
+
         if data_dict["timeout"] == 0:
             code = data_dict["stat_code"]
             content = data_dict["contents"]
             rs_time = data_dict["resp_time"]
 
-            if code != threshold.get("stat_code", 200):
-                self.stat_code = 1
+            # HTTP 状态码
+            url_check_http_status_code.labels(
+                task_name=self.task_name, method=method
+            ).set(code)
 
-            if "math_str" in threshold:
-                self.stat_math_str = 0 if threshold["math_str"] in content else 1
+            # 响应时间（毫秒）
+            url_check_http_response_time_ms.labels(
+                task_name=self.task_name, method=method
+            ).observe(rs_time)
 
-            if "delay" in threshold:
-                self.delay = 0 if rs_time < threshold["delay"][0] else 1
+            # 响应内容（截断）
+            content_info = content[:500] if content else ""
+            url_check_http_contents.labels(
+                task_name=self.task_name, method=method
+            ).info({"body": content_info})
 
+            # JSON 解析结果（应用层判断）
             json_parse_ok, json_path_ok = self.validate_json(
                 content,
                 expect_json=expect_json,
@@ -451,14 +453,58 @@ class cherker:
                 json_path_value=json_path_value,
             )
 
-            if expect_json and json_path:
-                if not json_parse_ok or not json_path_ok:
-                    self.stat_math_str = 1
+            url_check_json_valid.labels(task_name=self.task_name, method=method).set(
+                1 if json_parse_ok else 0
+            )
+
+            url_check_json_path_match.labels(
+                task_name=self.task_name, method=method
+            ).set(1 if json_path_ok else 0)
+
         else:
-            self.timeout = 1
-            code = "timeout"
-            rs_time = "timeout"
-        # 生成状态数据
+            # 超时
+            code = -1  # 超时时无状态码
+            content = ""
+            rs_time = 0
+
+            url_check_http_timeout.labels(task_name=self.task_name, method=method).inc()
+
+            url_check_http_status_code.labels(
+                task_name=self.task_name, method=method
+            ).set(-1)
+
+            url_check_json_valid.labels(task_name=self.task_name, method=method).set(0)
+
+            url_check_json_path_match.labels(
+                task_name=self.task_name, method=method
+            ).set(0)
+
+        # ==========================================================================
+        # 2. 全部验证（要数据说话）
+        # ==========================================================================
+
+        # 状态码验证
+        if code != -1 and code != threshold.get("stat_code", 200):
+            self.stat_code = 1
+        else:
+            self.stat_code = 0
+
+        # 关键字验证
+        if code != -1 and "math_str" in threshold:
+            self.stat_math_str = 0 if threshold["math_str"] in content else 1
+        else:
+            self.stat_math_str = 0
+
+        # 响应时间验证
+        if code != -1 and "delay" in threshold:
+            self.delay = 0 if rs_time < threshold["delay"][0] else 1
+        else:
+            self.delay = 0
+
+        # ==========================================================================
+        # 3. 生成状态数据和告警消息
+        # ==========================================================================
+
         status_data = {
             self.task_name: {
                 "url": data_dict["url"],
@@ -471,30 +517,37 @@ class cherker:
                 "time": time,
             }
         }
-        # 有了状态数据，就可以生成消息信息
+
+        # 告警消息
         self.message["stat_code"] = "code:{}，threshold:{} URL:{}".format(
-            status_data[self.task_name]["code"],
-            threshold["stat_code"],
-            status_data[self.task_name]["url"],
+            code,
+            threshold.get("stat_code", 200),
+            data_dict["url"],
         )
-        self.message["stat_timeout"] = "stat_timeout:{}，threshold: 0 URL:{}".format(
-            status_data[self.task_name]["timeout"], status_data[self.task_name]["url"]
+        self.message["stat_timeout"] = "timeout:{} URL:{}".format(
+            data_dict["timeout"], data_dict["url"]
         )
-        self.message["stat_math_str"] = (
-            "匹配字段:{}, stat_math_str:{} threshold: 0 URL:{}".format(
-                threshold["math_str"],
-                status_data[self.task_name]["stat_math_str"],
-                status_data[self.task_name]["url"],
-            )
+        self.message["stat_math_str"] = "匹配字段:{}, stat_math_str:{} URL:{}".format(
+            threshold.get("math_str", ""),
+            self.stat_math_str,
+            data_dict["url"],
         )
-        self.message["stat_delay"] = (
-            "目前响应时间:{} 预设响应时间:{}  stat_delay:{}  threshold: 0  URL:{}".format(
-                status_data[self.task_name]["delay"],
-                threshold["delay"][0],
-                status_data[self.task_name]["stat_delay"],
-                status_data[self.task_name]["url"],
-            )
+        self.message["stat_delay"] = "响应时间:{}ms, 预设:{}ms URL:{}".format(
+            rs_time,
+            threshold.get("delay", [0])[0] if "delay" in threshold else 0,
+            data_dict["url"],
         )
+
+        # ==========================================================================
+        # 4. 持久化和告警（保持原有逻辑）
+        # ==========================================================================
+
+        datafile = "data/{}.pkl".format(self.task_name)
+
+        if not os.path.exists(datafile):
+            self.first_run_task(status_data, threshold, time, datafile)
+        else:
+            pass  # 保持原有持久化和告警逻辑
 
         # 根据任务分类，才不会出现io 冲突
         datafile = "data/{}.pkl".format(self.task_name)  # 文件名字
@@ -638,26 +691,19 @@ class cherker:
                 pickle.dump(temp_dict, f)
 
         # ==========================================================================
-        # 更新 Prometheus 指标（告警开关不影响指标收集）
+        # 更新 Prometheus 聚合指标（兼容旧版）
         # ==========================================================================
-        # 根据检查结果更新对应的指标
 
-        # 获取 HTTP 方法（优先使用 self.method，否则为 unknown）
-        method = self.method if self.method else "unknown"
-
-        # 超时情况：更新 timeout 计数器（status_code 字段不存在）
         if self.timeout == 1:
             url_check_timeout_total.labels(
                 task_name=self.task_name, method=method
             ).inc()
         else:
-            # 正常响应：更新 success 计数器（使用实际状态码作为标签）
             status_code = str(code)
             url_check_success_total.labels(
                 task_name=self.task_name, status_code=status_code, method=method
             ).inc()
 
-            # 记录响应时间（转换为秒）
             if isinstance(rs_time, (int, float)):
                 url_check_response_time_seconds.labels(
                     task_name=self.task_name, method=method
