@@ -151,3 +151,63 @@ tasks:
     ssl:
       verify: true
       warning_days: 30
+
+  # ============================================
+  # 测试任务：验证 Prometheus 指标
+  # ============================================
+
+  # 测试1：内容匹配成功（body 包含 "quia"）
+  - name: test-content-match-success
+    method: get
+    url: https://jsonplaceholder.typicode.com/posts/1
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+      math_str: "quia"  # 响应包含 "quia"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # 测试2：内容匹配失败（body 不包含 "NOT_EXIST_KEYWORD"）
+  - name: test-content-match-fail
+    method: get
+    url: https://jsonplaceholder.typicode.com/posts/1
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+      math_str: "NOT_EXIST_KEYWORD"  # 响应不包含此关键字
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # 测试3：JSON Path 匹配成功
+  - name: test-json-path-success
+    method: get
+    url: https://jsonplaceholder.typicode.com/posts/1
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+    expect_json: true
+    json_path: "$.id"
+    json_path_value: "1"  # id = 1，匹配成功
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # 测试4：JSON Path 匹配失败
+  - name: test-json-path-fail
+    method: get
+    url: https://jsonplaceholder.typicode.com/posts/1
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+    expect_json: true
+    json_path: "$.id"
+    json_path_value: "999"  # id = 1，不匹配 999
+    ssl:
+      verify: true
+      warning_days: 30

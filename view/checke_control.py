@@ -56,6 +56,12 @@ url_check_json_path_match = Gauge(
     ["task_name", "method"],
 )
 
+url_check_content_match = Gauge(
+    "url_check_content_match",
+    "Content match result (1=match, 0=no match)",
+    ["task_name", "method"],
+)
+
 # 聚合指标（方便查看）
 url_check_success_total = Counter(
     "url_check_success_total",
@@ -440,10 +446,12 @@ class cherker:
             ).observe(rs_time)
 
             # 响应内容（截断）
-            content_info = content[:500] if content else ""
-            url_check_http_contents.labels(
-                task_name=self.task_name, method=method
-            ).info({"body": content_info})
+            # 只有未配置 math_str 时才传给 Prometheus（供 Prometheus 正则匹配）
+            if "math_str" not in threshold:
+                content_info = content[:500] if content else ""
+                url_check_http_contents.labels(
+                    task_name=self.task_name, method=method
+                ).info({"body": content_info})
 
             # JSON 解析结果（应用层判断）
             json_parse_ok, json_path_ok = self.validate_json(
@@ -460,6 +468,13 @@ class cherker:
             url_check_json_path_match.labels(
                 task_name=self.task_name, method=method
             ).set(1 if json_path_ok else 0)
+
+            # 关键字匹配结果（应用层判断）
+            if "math_str" in threshold:
+                content_match = 1 if threshold["math_str"] in content else 0
+                url_check_content_match.labels(
+                    task_name=self.task_name, method=method
+                ).set(content_match)
 
         else:
             # 超时
@@ -478,6 +493,10 @@ class cherker:
             url_check_json_path_match.labels(
                 task_name=self.task_name, method=method
             ).set(0)
+
+            url_check_content_match.labels(task_name=self.task_name, method=method).set(
+                0
+            )
 
         # ==========================================================================
         # 2. 全部验证（要数据说话）

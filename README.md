@@ -183,8 +183,8 @@ send_to = ["admin@example.com"]
 |----------|----------|------|
 | 状态码 | Prometheus | 原始数据采集，PromQL 判断 |
 | 响应时间 | Prometheus | 原始数据采集，PromQL 判断 |
-| 关键字匹配 | Prometheus | 原始内容采集，PromQL 正则 |
-| JSON 结构化 | 应用层 | Prometheus 难以处理 JSON Path |
+| 关键字匹配 | 应用层 | Prometheus 难以处理大 body，应用层匹配后传结果 |
+| JSON 结构化 | 应用层 | json_path + value 匹配，传结果 |
 
 ### 原始数据指标（Prometheus 判断用）
 
@@ -192,10 +192,11 @@ send_to = ["admin@example.com"]
 |------|------|------|
 | `url_check_http_status_code` | Gauge | HTTP 状态码（数值） |
 | `url_check_http_response_time_ms` | Histogram | 响应时间（毫秒） |
-| `url_check_http_contents` | Info | 响应内容（截断） |
+| `url_check_http_contents` | Info | 响应内容（截断，仅未配置 math_str 时采集） |
 | `url_check_http_timeout_total` | Counter | 超时次数 |
 | `url_check_json_valid` | Gauge | JSON 解析结果 (1=valid, 0=invalid) |
 | `url_check_json_path_match` | Gauge | JSON Path 匹配结果 (1=match, 0=no match) |
+| `url_check_content_match` | Gauge | 关键字匹配结果 (1=match, 0=no match) |
 
 ### PromQL 判断示例
 
@@ -206,7 +207,10 @@ url_check_http_status_code != 200
 # 响应时间告警（Histogram 需要使用 >）
 url_check_http_response_time_ms > 1000
 
-# 关键字告警（使用正则匹配）
+# 关键字告警（应用层匹配，Prometheus 拿结果）
+url_check_content_match == 0
+
+# Prometheus 正则匹配（仅未配置 math_str 时可用）
 url_check_http_contents_info{body!~".*(success|ok).*"}
 
 # JSON 解析失败
@@ -216,14 +220,7 @@ url_check_json_valid == 0
 url_check_json_path_match == 0
 
 # 超时告警（Counter 需要使用 rate() 或 increase()）
-# 方式1：最近 5 分钟有超时发生（推荐）
 rate(url_check_http_timeout_total[5m]) > 0
-
-# 方式2：最近 5 分钟超时次数增加
-increase(url_check_http_timeout_total[5m]) > 0
-
-# 方式3：超时率
-rate(url_check_http_timeout_total[5m]) > 0.1
 ```
 
 ### PrometheusAlertmanager 告警规则示例
@@ -274,6 +271,14 @@ groups:
           severity: warning
         annotations:
           summary: "{{ $labels.task_name }} JSON Path 验证失败"
+
+      # 关键字匹配失败（应用层匹配，Prometheus 拿结果）
+      - alert: URLCheckContentMismatch
+        expr: url_check_content_match{task_name="api-health"} == 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.task_name }} 关键字匹配失败"
 ```
 
 ### 指标类型与判断方式
@@ -283,7 +288,7 @@ groups:
 | Gauge | `url_check_http_status_code` | `!= 200` |
 | Histogram | `url_check_http_response_time_ms` | `> 1000` |
 | Counter | `url_check_http_timeout_total` | `rate(...[5m]) > 0` |
-| Info | `url_check_http_contents_info` | `=~".*pattern.*"` |
+| Info | `url_check_http_contents_info` | `=~".*pattern.*"`（仅未配置 math_str 时） |
 
 ### 聚合指标（兼容旧版）
 
