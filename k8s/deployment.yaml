@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: url-check
+  labels:
+    app: url-check
+  annotations:
+    configmap.reloader.stakater.com/reload: "url-check-tasks"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: url-check
+  template:
+    metadata:
+      labels:
+        app: url-check
+      annotations:
+        configmap.reloader.stakater.com/reload: "url-check-tasks"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: url-check
+          image: url-check:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+              name: http
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: FLASK_ENV
+              value: "production"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: tasks-volume
+              mountPath: /home/appuser/conf
+              readOnly: true
+      volumes:
+        - name: tasks-volume
+          configMap:
+            name: url-check-tasks
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-check-tasks
+data:
+  tasks.yaml: |
+    tasks:
+      # 任务1：百度首页
+      - name: 百度首页
+        method: get
+        url: https://www.baidu.com
+        headers:
+          Content-Type: application/x-www-form-urlencoded
+        timeout: 5
+        interval: 60
+        threshold:
+          stat_code: 200
+          delay: [300, 2]
+          math_str: ""
+        max_response_size: 1048576  # 1MB
+        ssl:
+          verify: true
+          warning_days: 30
+
+      # 任务2：云南移动服务
+      - name: task1
+        method: get
+        url: https://ma.yn-10086.cn/ec-server/staff/init
+        headers:
+          Content-Type: application/json,text/plain
+          Referer: https://ma.yn-10086.cn/ec-server/10086/pc
+        timeout: 5
+        interval: 60
+        threshold:
+          stat_code: 200
+          delay: [500, 2]
+          math_str: ""
+        max_response_size: 524288  # 512KB
+        ssl:
+          verify: true
+          warning_days: 30
+
+      # 任务3：外部API（带重试配置）
+      - name: external-api
+        method: get
+        url: https://api.external.com/health
+        timeout: 10
+        interval: 60
+        threshold:
+          stat_code: 200
+          delay: [1000, 3]
+        retry:
+          count: 3       # 重试3次
+          delay: 2        # 每次间隔2秒
+        max_response_size: 10240  # 10KB
+        ssl:
+          verify: true
+          warning_days: 30
+
+      # 任务4：通过代理检查
+      - name: proxy-check
+        method: get
+        url: https://www.google.com
+        timeout: 10
+        interval: 300
+        threshold:
+          stat_code: 200
+          delay: [2000, 2]
+        proxy: http://127.0.0.1:7890  # 代理地址
+
+      # 任务5：内网服务（跳过 SSL 验证）
+      - name: internal-service
+        method: get
+        url: https://internal.company.com/api/health
+        timeout: 10
+        interval: 60
+        threshold:
+          stat_code: 200
+          delay: [1000, 2]
+        ssl:
+          verify: false  # 跳过 SSL 验证（内网私有证书）
+          warning_days: 0  # 不检查证书有效期
+
+      # 任务6：JSON API 验证示例（expect_json + json_path + json_path_value）
+      - name: json-api-health
+        method: get
+        url: https://jsonplaceholder.typicode.com/posts/1
+        timeout: 10
+        interval: 30
+        threshold:
+          stat_code: 200
+          math_str: ""
+        expect_json: true
+        json_path: "$.id"
+        json_path_value: "1"
+        ssl:
+          verify: true
+          warning_days: 30
+
+      # 任务7：同时验证 JSON 和关键字
+      - name: json-with-keyword
+        method: get
+        url: https://jsonplaceholder.typicode.com/todos/1
+        timeout: 10
+        interval: 30
+        threshold:
+          stat_code: 200
+          math_str: "delectus"
+        expect_json: true
+        json_path: "$.completed"
+        json_path_value: "false"
+        ssl:
+          verify: true
+          warning_days: 30

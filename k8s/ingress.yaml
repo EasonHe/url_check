@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: url-check
+  labels:
+    app: url-check
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: url-check.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: url-check
+                port:
+                  number: 4000

@@ -1,20 +1,47 @@
-#config.py
-import  sys,os
-mail_conf = 'conf/mail.ini'#邮件程序使用的文件
-task_conf = 'conf/task.ini'#任务文件
-#告警设置
-send_to =  ['hewei@raiyee.com']
+# config.py
+import sys, os
+
+mail_conf = "conf/mail.ini"  # 邮件程序使用的文件
+tasks_yaml = "conf/tasks.yaml"  # YAML 格式任务配置文件
+# 告警设置
+send_to = ["hewei@raiyee.com"]
 history_datat_day = 3
+
+# =============================================================================
+# 告警开关配置
+# =============================================================================
+# enable_alerts: 总开关，控制是否发送任何告警通知
+#
+#   True:  发送告警通知（需配合下面的单独开关）
+#   False: 不发送告警，仅收集 Prometheus 指标（通过 Prometheus Alertmanager 告警）
+#
+# enable_dingding: 钉钉告警开关（仅在 enable_alerts=True 时生效）
+#   True:  发送钉钉告警通知
+#   False: 不发送钉钉告警
+#
+# enable_mail: 邮件告警开关（仅在 enable_alerts=True 时生效）
+#   True:  发送邮件告警通知
+#   False: 不发送邮件告警
+#
+# 使用场景：
+#   - enable_alerts=False: 接入 Prometheus 生态，使用 Alertmanager 管理告警
+#   - enable_alerts=True + enable_dingding=True + enable_mail=False: 仅钉钉告警
+#   - enable_alerts=True + enable_dingding=False + enable_mail=True: 仅邮件告警
+#   - enable_alerts=True + enable_dingding=True + enable_mail=True: 全部告警
+#
+# Prometheus 告警规则示例（prometheus-rules.yml）：
+#   - alert: URLCheckFailed
+#     expr: url_check_success_total{status_code!="200"} > 0
+#     for: 1m
+#     labels:
+#       severity: critical
+#     annotations:
+#       summary: "URL {{ $labels.task_name }} 检查失败"
+# =============================================================================
+enable_alerts = False  # 总开关
+enable_dingding = True  # 钉钉告警开关
+enable_mail = False  # 邮件告警开关（默认关闭，需配置 mail.ini）
 
 
 dingding_url = "https://oapi.dingtalk.com/robot/send?"
 access_token = "6f3c39a23f1ce5ee22e888d9b1e61df18a61be7305ade92d179cfdfedda45e"
-#task_conf 文件使用说明
-#
-# 通过post 方法添加动态任务，
-# 参数又有如下
-# timout（超时时间） headers（请求头） cookies payload（数据），interval (url检查的间隔时间)
-#监控参数
-# {'add_job':  {"section": 'www.baidu.com', 'url':"http://www.baidu.com",'method': "get","interval" : 5}}
-
-#{'add_job':  {"section": 'www.baidu.com', 'url':"http://www.baidu.com",'method': "get","interval":5,"threshold":{'stat_code': 200,'delay':[300,2],'math_str': '百度' }    }}

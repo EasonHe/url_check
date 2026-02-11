@@ -22,6 +22,8 @@ WORKDIR /home/appuser
 # Copy only runtime files from builder
 COPY --from=builder /opt/venv /home/appuser/.venv
 COPY url_check.py run.sh ./
+COPY conf/ ./conf/
+COPY view/ ./view/
 RUN chmod +x run.sh
 
 # Expose port
