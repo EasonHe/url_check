@@ -23,8 +23,8 @@ spec:
     spec:
       containers:
         - name: url-check
-          image: url-check:latest
-          imagePullPolicy: IfNotPresent
+          image: 192.168.8.8:9000/hewei/url_check:v20260212
+          imagePullPolicy: Always
           ports:
             - containerPort: 4000
               name: http
@@ -60,10 +60,30 @@ spec:
             - name: tasks-volume
               mountPath: /home/appuser/conf
               readOnly: true
+            - name: alerts-volume
+              mountPath: /home/appuser/conf/alerts.yaml
+              readOnly: true
+              subPath: alerts.yaml
+            - name: config-volume
+              mountPath: /home/appuser/conf/config.py
+              readOnly: true
+              subPath: config.py
       volumes:
         - name: tasks-volume
           configMap:
             name: url-check-tasks
+        - name: alerts-volume
+          configMap:
+            name: url-check-alerts
+            items:
+              - key: alerts.yaml
+                path: alerts.yaml
+        - name: config-volume
+          configMap:
+            name: url-check-config
+            items:
+              - key: config.py
+                path: config.py
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -179,3 +199,56 @@ data:
         ssl:
           verify: true
           warning_days: 30
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-check-alerts
+data:
+  alerts.yaml: |
+    alerts:
+      - name: status_code
+        enabled: true
+        channels: [dingding, mail]
+        recover: true
+      - name: timeout
+        enabled: true
+        channels: [dingding]
+        recover: true
+      - name: json_mismatch
+        enabled: true
+        channels: [dingding, mail]
+        recover: true
+      - name: content_mismatch
+        enabled: true
+        channels: [dingding]
+        recover: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-check-config
+data:
+  config.py: |
+    # Flask 配置
+    host = "0.0.0.0"
+    port = 4000
+    metrics_port = 9090
+
+    # 任务配置
+    tasks_config_path = "/home/appuser/conf/tasks.yaml"
+
+    # 告警配置
+    enable_alerts = True
+    enable_dingding = True
+    enable_mail = True
+    dingding_webhook = "${DINGDING_WEBHOOK}"
+    mail_smtp_server = "${MAIL_SMTP_SERVER}"
+    mail_smtp_port = 465
+    mail_sender = "${MAIL_SENDER}"
+    mail_sender_password = "${MAIL_SENDER_PASSWORD}"
+    mail_receiver = "${MAIL_RECEIVER}"
+
+    # 告警日志配置
+    alert_log_enabled = True
+    alert_log_retention_days = 30

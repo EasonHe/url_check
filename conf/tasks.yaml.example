@@ -1,0 +1,175 @@
+# 任务配置
+tasks:
+  # =====================================================
+  # 任务1：基础 HTTP 检查（百度首页）
+  # =====================================================
+  - name: baidu-home
+    method: get
+    url: https://www.baidu.com
+    timeout: 5
+    interval: 60
+    threshold:
+      stat_code: 200
+      delay: [300, 2]
+      math_str: "百度"
+    max_response_size: 1048576
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务2：JSON API 验证（健康检查接口）
+  # =====================================================
+  - name: api-health
+    method: get
+    url: https://api.example.com/health
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      delay: [500, 2]
+    expect_json: true
+    json_path: "$.status"
+    json_path_value: "active"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务3：POST 请求 + 重试机制
+  # =====================================================
+  - name: submit-order
+    method: post
+    url: https://api.example.com/orders
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer YOUR_TOKEN"
+    payload: '{"action": "query"}'
+    timeout: 10
+    interval: 60
+    retry:
+      count: 3
+      delay: 2
+    threshold:
+      stat_code: 200
+      delay: [1000, 2]
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务4：带代理的请求
+  # =====================================================
+  - name: proxy-check-google
+    method: get
+    url: https://www.google.com
+    timeout: 10
+    interval: 300
+    threshold:
+      stat_code: 200
+      delay: [2000, 2]
+    proxy: http://127.0.0.1:7890
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务5：内网服务（跳过 SSL 验证）
+  # =====================================================
+  - name: internal-service
+    method: get
+    url: https://internal.company.com/api/health
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+      delay: [1000, 2]
+    ssl:
+      verify: false
+      warning_days: 0
+
+  # =====================================================
+  # 任务6：同时验证 JSON 和关键字
+  # =====================================================
+  - name: json-with-keyword
+    method: get
+    url: https://jsonplaceholder.typicode.com/todos/1
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      math_str: "delectus"
+    expect_json: true
+    json_path: "$.completed"
+    json_path_value: "false"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务7：RESTful API（带 Query 参数）
+  # =====================================================
+  - name: user-info
+    method: get
+    url: https://api.example.com/users/123
+    headers:
+      Accept: application/json
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+      delay: [500, 2]
+    expect_json: true
+    json_path: "$.id"
+    json_path_value: "123"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务8：表单提交
+  # =====================================================
+  - name: login-check
+    method: post
+    url: https://portal.example.com/login
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+    payload: "username=admin&password=admin123"
+    timeout: 10
+    interval: 120
+    threshold:
+      stat_code: 200
+      delay: [1000, 2]
+      math_str: "success"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # =====================================================
+  # 任务9：SSL 证书监控（无实际请求）
+  # =====================================================
+  - name: ssl-monitor
+    method: get
+    url: https://www.example.com
+    timeout: 10
+    interval: 3600
+    threshold:
+      stat_code: 200
+      delay: [3000, 1]
+    ssl:
+      verify: true
+      warning_days: 14
+
+  # =====================================================
+  # 任务10：WebSocket 健康检查（降级为 TCP 连接）
+  # =====================================================
+  - name: websocket-check
+    method: get
+    url: wss://ws.example.com/ping
+    timeout: 5
+    interval: 60
+    threshold:
+      stat_code: 101
+    ssl:
+      verify: true
+      warning_days: 30

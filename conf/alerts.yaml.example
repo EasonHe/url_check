@@ -1,0 +1,31 @@
+# 告警配置（细粒度控制）
+alerts:
+  # 状态码告警
+  - name: status_code
+    enabled: true
+    channels: [dingding, mail]
+    recover: true
+
+  # 超时告警
+  - name: timeout
+    enabled: true
+    channels: [dingding]
+    recover: true
+
+  # 关键字匹配告警
+  - name: content_match
+    enabled: true
+    channels: [dingding, mail]
+    recover: true
+
+  # JSON 解析失败告警
+  - name: json_mismatch
+    enabled: true
+    channels: [dingding, mail]
+    recover: true
+
+  # 响应时间告警
+  - name: delay
+    enabled: true
+    channels: [dingding]
+    recover: true

@@ -7,24 +7,23 @@ RUN pip install "uv>=0.9.28"
 # Copy requirements and install dependencies into /opt/venv
 WORKDIR /opt/app
 COPY requirements.txt .
-RUN uv venv /opt/venv && \
-    uv pip install --python-version 3.14 --system-site-packages -r requirements.txt
+RUN uv venv /opt/venv
+RUN uv pip install --system -r requirements.txt
 
 # Final stage
 FROM python:3.14-slim-bookworm
 
-# Create non-root user
+# Copy only runtime files from builder
+COPY --from=builder /opt/venv /home/appuser/.venv
+COPY --chmod=755 url_check.py run.sh ./
+COPY conf/ ./conf/
+COPY view/ ./view/
+
+# Create non-root user and set permissions
 RUN adduser --disabled-password --gecos "" --shell /bin/bash --home /home/appuser appuser && \
     chown -R appuser:appuser /home/appuser
 USER appuser:appuser
 WORKDIR /home/appuser
-
-# Copy only runtime files from builder
-COPY --from=builder /opt/venv /home/appuser/.venv
-COPY url_check.py run.sh ./
-COPY conf/ ./conf/
-COPY view/ ./view/
-RUN chmod +x run.sh
 
 # Expose port
 EXPOSE 4000
