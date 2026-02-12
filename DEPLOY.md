@@ -42,7 +42,7 @@ URL 健康检查服务是一个定时检查 URL 可用性的监控系统，支�
 #### 1. 构建镜像
 
 ```bash
-cd /Users/hewei/myworkspace/url_check
+cd /path/to/url_check
 
 # 构建镜像
 docker build -t url-check:latest .
@@ -213,7 +213,7 @@ docker-compose logs -f
 
 ```bash
 # 拉取镜像
-docker pull 192.168.8.8:9000/hewei/url_check:v20260212
+docker pull 192.168.8.8:9000/your-namespace/url_check:v20260212
 
 # 运行
 docker run -d \
@@ -221,7 +221,7 @@ docker run -d \
   -p 4000:4000 \
   -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf \
-  192.168.8.8:9000/hewei/url_check:v20260212
+  192.168.8.8:9000/your-namespace/url_check:v20260212
 ```
 
 ---
@@ -238,14 +238,14 @@ docker run -d \
 
 ```bash
 # 构建镜像
-cd /Users/hewei/myworkspace/url_check
-docker build -t 192.168.8.8:9000/hewei/url_check:v20260212 .
+cd /path/to/url_check
+docker build -t 192.168.8.8:9000/your-namespace/url_check:v20260212 .
 
 # 登录镜像仓库
 docker login 192.168.8.8:9000
 
 # 推送镜像
-docker push 192.168.8.8:9000/hewei/url_check:v20260212
+docker push 192.168.8.8:9000/your-namespace/url_check:v20260212
 ```
 
 ### 步骤 2：创建命名空间
@@ -793,7 +793,7 @@ spec:
     spec:
       containers:
         - name: url-check
-          image: 192.168.8.8:9000/hewei/url_check:v20260212
+          image: 192.168.8.8:9000/your-namespace/url_check:v20260212
           imagePullPolicy: Always
           ports:
             - containerPort: 4000
@@ -1166,7 +1166,7 @@ docker-compose up -d
 
 ```bash
 kubectl set image deployment/url-check \
-  url-check=192.168.8.8:9000/hewei/url_check:v20260212 \
+  url-check=192.168.8.8:9000/your-namespace/url_check:v20260212 \
   -n url-check
 ```
 
@@ -1301,7 +1301,7 @@ kubectl logs -n url-check -l app=url-check -f
 kubectl rollout restart deployment/url-check -n url-check
 
 # 更新镜像
-kubectl set image deployment/url-check url-check=192.168.8.8:9000/hewei/url_check:v20260212 -n url-check
+kubectl set image deployment/url-check url-check=192.168.8.8:9000/your-namespace/url_check:v20260212 -n url-check
 
 # 回滚
 kubectl rollout undo deployment/url-check -n url-check
