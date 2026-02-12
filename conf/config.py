@@ -59,3 +59,27 @@ from conf.alerts_config import (
 
 dingding_url = "https://oapi.dingtalk.com/robot/send?"
 access_token = "6f3c39a23f1ce5ee22e888d9b1e61df18a61be7305ade92d179cfdfedda45e"
+
+# =============================================================================
+# 告警日志配置
+# =============================================================================
+# alert_log_enabled: 是否启用独立告警日志
+#   True:  启用，写入 logs/alert.log（JSON 格式）
+#   False: 禁用
+#
+# alert_log_retention_days: 日志保留天数
+#   0:   不限制
+#   30:  保留 30 天
+#
+# 日志格式（JSON）：
+# {
+#   "timestamp": "2024-01-01 00:00:00",
+#   "level": "INFO",
+#   "type": "故障",
+#   "task_name": "api-health",
+#   "alert_type": "状态码",
+#   "message": "code:500, threshold:200 URL:https://..."
+# }
+# =============================================================================
+alert_log_enabled = True
+alert_log_retention_days = 30

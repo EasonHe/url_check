@@ -352,6 +352,45 @@ timeout:1 URL:https://api.example.com
 响应时间:1500ms, 预设:1000ms URL:https://api.example.com
 ```
 
+### 告警日志配置
+
+告警日志独立输出到 `logs/alert_YYYY-MM-DD.log`，JSON 格式，按天保留。
+
+#### 配置项 (conf/config.py)
+
+```python
+# 是否启用独立告警日志
+alert_log_enabled = True
+
+# 日志保留天数（0 表示不限制）
+alert_log_retention_days = 30
+```
+
+#### 日志格式（JSON）
+
+```json
+{
+  "timestamp": "2024-01-01 00:00:00",
+  "level": "WARNING",
+  "type": "故障",
+  "task_name": "api-health",
+  "alert_type": "状态码",
+  "message": "【故障】api-health - 状态码 | code:500 | URL:https://..."
+}
+```
+
+#### 日志文件
+
+```
+logs/
+├── alert_2024-01-01.log
+├── alert_2024-01-02.log
+├── alert_2024-01-03.log
+└── ...
+```
+
+自动清理超过 `alert_log_retention_days` 天的日志文件。
+
 ### 指标类型与判断方式
 
 | 指标类型 | 指标示例 | 正确判断方式 |

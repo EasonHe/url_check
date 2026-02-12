@@ -3,6 +3,8 @@ import pickle
 import datetime
 import logging
 import ssl
+import json
+import glob
 from datetime import timedelta
 from prometheus_client import Counter, Histogram, Gauge, Info
 from view.mail_server import mailconf
@@ -10,6 +12,85 @@ from view.dingding import ding_sender
 from conf import config
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# 告警日志配置
+# =============================================================================
+ALERT_LOG_DIR = "logs"
+ALERT_LOG_FILE = os.path.join(ALERT_LOG_DIR, "alert.log")
+
+
+def _ensure_log_dir():
+    """确保日志目录存在"""
+    if not os.path.exists(ALERT_LOG_DIR):
+        os.makedirs(ALERT_LOG_DIR, exist_ok=True)
+
+
+def _get_log_filename():
+    """获取带日期的日志文件名"""
+    _ensure_log_dir()
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    return os.path.join(ALERT_LOG_DIR, f"alert_{today}.log")
+
+
+def _cleanup_old_logs():
+    """清理过期日志文件"""
+    retention_days = getattr(config, "alert_log_retention_days", 30)
+    if retention_days <= 0:
+        return
+
+    cutoff = datetime.datetime.now() - timedelta(days=retention_days)
+    pattern = os.path.join(ALERT_LOG_DIR, "alert_*.log")
+
+    for log_file in glob.glob(pattern):
+        try:
+            # 从文件名提取日期
+            filename = os.path.basename(log_file)
+            date_str = filename.replace("alert_", "").replace(".log", "")
+            log_date = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            log_date = log_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            if log_date < cutoff:
+                os.remove(log_file)
+                logger.info(f"删除过期告警日志: {log_file}")
+        except Exception as e:
+            logger.warning(f"清理日志文件失败 {log_file}: {e}")
+
+
+def _write_alert_log(alert_type, task_name, message, level="INFO"):
+    """写入告警日志（JSON 格式）
+
+    Args:
+        alert_type: 告警类型（故障/恢复）
+        task_name: 任务名称
+        message: 告警消息
+        level: 日志级别（INFO/WARNING/ERROR）
+    """
+    if not getattr(config, "alert_log_enabled", True):
+        return
+
+    try:
+        log_entry = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "level": level,
+            "type": alert_type,
+            "task_name": task_name,
+            "message": message,
+        }
+
+        log_file = _get_log_filename()
+
+        # 写入日志（追加模式）
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+
+        # 每分钟清理一次过期日志
+        if datetime.datetime.now().second == 0:
+            _cleanup_old_logs()
+
+    except Exception as e:
+        logger.warning(f"写入告警日志失败: {e}")
+
 
 # =============================================================================
 # Prometheus 指标定义
@@ -225,9 +306,6 @@ class cherker:
         except Exception as e:
             logger.warning(f"JSON Path 验证失败: {json_path_expr}, 错误: {e}")
             json_path_ok = False
-        except Exception as e:
-            logger.warning(f"JSON Path 验证失败: {json_path_expr}, 错误: {e}")
-            json_path_ok = False
 
         url_check_json_path_match.labels(
             task_name=self.task_name or "", method=self.method or ""
@@ -288,6 +366,15 @@ class cherker:
         # 发送邮件
         if "mail" in channels and config.enable_mail:
             mailconf(tos=config.send_to, subject=subject, content=msg)
+
+        # 写入独立告警日志（JSON 格式）
+        log_level = "WARNING" if not is_recovery else "INFO"
+        _write_alert_log(
+            alert_type="故障" if not is_recovery else "恢复",
+            task_name=self.task_name,
+            message=f"{subject} | {msg}",
+            level=log_level,
+        )
 
     def send_warm(self, alarm=None, threshold=None):
         """发送告警通知（支持配置化）
