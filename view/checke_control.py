@@ -235,117 +235,81 @@ class cherker:
 
         return json_parse_ok, json_path_ok
 
-    def send_warm(self, alarm=None, threshold=None):
+    def _send_alert_if_needed(self, alert_name, alarm, threshold, is_recovery=False):
+        """统一处理告警/恢复通知
+
+        Args:
+            alert_name: 告警类型名称 (status_code, timeout, content_match, delay)
+            alarm: 上次告警状态字典
+            threshold: 配置阈值字典
+            is_recovery: 是否是恢复通知
         """
-        发送告警通知（钉钉/邮件）
+        # 获取告警类型信息
+        alert_info = config.get_alert_type_info(alert_name)
+        if not alert_info:
+            return
+
+        code_key = alert_info.get("code_key")
+        msg_key = alert_info.get("msg_key")
+        alert_display_name = alert_info.get("name", alert_name)
+
+        # 检查是否启用
+        if not config.enable_alerts or not config.is_alert_enabled(alert_name):
+            return
+
+        # 获取通知渠道
+        channels = config.get_alert_channels(alert_name)
+
+        # 判断是否需要发送
+        # 故障发生：now_alarm=1, alarm=0
+        # 恢复通知：now_alarm=0, alarm=1
+        need_send = False
+        subject = ""
+
+        if self.now_alarm[code_key] == 1 and alarm[code_key] == 0:
+            # 故障发生
+            subject = "【故障】{} - {}".format(self.task_name, alert_display_name)
+            need_send = True
+        elif is_recovery and self.now_alarm[code_key] == 0 and alarm[code_key] == 1:
+            # 恢复通知
+            if config.is_recover_enabled(alert_name):
+                subject = "【恢复】{} - {}".format(self.task_name, alert_display_name)
+                need_send = True
+
+        if not need_send or not msg_key:
+            return
+
+        msg = self.message.get(msg_key, "")
+
+        # 发送钉钉
+        if "dingding" in channels and config.enable_dingding:
+            ding_sender(title=subject, msg=msg)
+
+        # 发送邮件
+        if "mail" in channels and config.enable_mail:
+            mailconf(tos=config.send_to, subject=subject, content=msg)
+
+    def send_warm(self, alarm=None, threshold=None):
+        """发送告警通知（支持配置化）
 
         功能：
-            - 检测告警状态变化（从故障到恢复，或从恢复到故障）
-            - 根据配置开关决定是否发送钉钉/邮件通知
+            - 根据配置决定是否发送告警/恢复通知
+            - 支持按告警类型配置通知渠道
 
-        告警类型：
-            - code_warm: 状态码错误
-            - timeout_warm: 请求超时
-            - math_warm: 关键字未匹配
-            - delay_warm: 响应时间过长
-
-        触发逻辑：
-            - now_alarm=1 且 alarm=0：故障发生（发送告警）
-            - now_alarm=0 且 alarm=1：故障恢复（发送恢复通知）
-
-        配置开关（conf/config.py）：
-            - enable_alerts: 总开关
-            - enable_dingding: 钉钉开关
-            - enable_mail: 邮件开关
+        配置来源：
+            - conf/alerts.yaml: 各类型告警的启用状态和渠道
+            - conf/config.py: 全局开关 (enable_alerts, enable_dingding, enable_mail)
         """
-        # 状态码错误告警
-        if self.now_alarm["code_warm"] == 1 and alarm["code_warm"] == 0:
-            subject = "{} 状态码错误".format(self.task_name)
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_code"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_code"],
-                )
-        if self.now_alarm["timeout_warm"] == 1 and alarm["timeout_warm"] == 0:
-            subject = "{} timeout".format(self.task_name)
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_timeout"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_timeout"],
-                )
-        if self.now_alarm["math_warm"] == 1 and alarm["math_warm"] == 0:
-            subject = "{}没有匹配到关键字 {}".format(
-                self.task_name, threshold["math_str"]
-            )
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_math_str"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_math_str"],
-                )
-        if self.now_alarm["delay_warm"] == 1 and alarm["delay_warm"] == 0:
-            subject = "{} 响应时间过长".format(self.task_name)
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_delay"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_delay"],
-                )
+        # 告警类型列表
+        alert_types = ["status_code", "timeout", "content_match", "delay"]
 
-        # 状态恢复通知
-        if self.now_alarm["code_warm"] == 0 and alarm["code_warm"] == 1:
-            subject = "{}  状态码错误:已经恢复".format(self.task_name)
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_code"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_code"],
-                )
-        if self.now_alarm["timeout_warm"] == 0 and alarm["timeout_warm"] == 1:
-            subject = "{} timeout:已经恢复".format(self.task_name)
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_timeout"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_timeout"],
-                )
+        # 发送故障告警
+        for alert_name in alert_types:
+            self._send_alert_if_needed(alert_name, alarm, threshold, is_recovery=False)
 
-        if self.now_alarm["math_warm"] == 0 and alarm["math_warm"] == 1:
-            subject = "{}  没有匹配到关键字:{}  已经恢复".format(
-                self.task_name, threshold["math_str"]
-            )
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_math_str"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_math_str"],
-                )
-        if self.now_alarm["delay_warm"] == 0 and alarm["delay_warm"] == 1:
-            subject = "{}  响应时间过长状态改变".format(self.task_name)
-            if config.enable_dingding:
-                ding_sender(title=subject, msg=self.message["stat_delay"])
-            if config.enable_mail:
-                mailconf(
-                    tos=config.send_to,
-                    subject=subject,
-                    content=self.message["stat_delay"],
-                )
+        # 发送恢复通知
+        for alert_name in alert_types:
+            self._send_alert_if_needed(alert_name, alarm, threshold, is_recovery=True)
 
     def first_run_task(self, status_data, threshold, time, datafile):
         """

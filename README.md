@@ -159,21 +159,66 @@ retry:
   delay: 2       # 重试间隔（秒）
 ```
 
-### 告警配置 (conf/config.py)
+### 告警配置
+
+支持两种配置方式：全局开关（旧版）或细粒度配置（新版）。
+
+#### 全局开关（旧版，兼容）
 
 ```python
-# 告警总开关
-enable_alerts = True
-
-# 钉钉告警
-enable_dingding = True
-dingding_access_token = "YOUR_TOKEN"
-dingding_secret = "YOUR_SECRET"
-
-# 邮件告警
-enable_mail = True
-send_to = ["admin@example.com"]
+# conf/config.py
+enable_alerts = True    # 总开关
+enable_dingding = True  # 钉钉开关
+enable_mail = False     # 邮件开关
 ```
+
+#### 细粒度配置（新版，推荐）
+
+```yaml
+# conf/alerts.yaml
+alerts:
+  # 状态码告警
+  - name: status_code
+    enabled: true
+    channels: [dingding, mail]  # 通知渠道
+    recover: true               # 是否发送恢复通知
+
+  # 超时告警
+  - name: timeout
+    enabled: true
+    channels: [dingding]
+    recover: true
+
+  # 关键字匹配告警
+  - name: content_match
+    enabled: true
+    channels: [dingding, mail]
+    recover: true
+
+  # 响应时间告警
+  - name: delay
+    enabled: true
+    channels: [dingding]
+    recover: true
+```
+
+#### 配置字段说明
+
+| 字段 | 说明 |
+|------|------|
+| `name` | 告警类型名称 |
+| `enabled` | 是否启用该类型告警 |
+| `channels` | 通知渠道列表：`dingding` / `mail` |
+| `recover` | 是否发送恢复通知 |
+
+#### 工作模式
+
+| 模式 | 配置 |
+|------|------|
+| Prometheus 告警 | `enable_alerts = False` |
+| 仅钉钉 | `enable_alerts = True` + `channels: [dingding]` |
+| 仅邮件 | `enable_alerts = True` + `channels: [mail]` |
+| 全部渠道 | `enable_alerts = True` + `channels: [dingding, mail]` |
 
 ## Prometheus 指标
 
@@ -281,6 +326,32 @@ groups:
           summary: "{{ $labels.task_name }} 关键字匹配失败"
 ```
 
+### 告警日志示例
+
+应用层告警日志输出：
+
+```
+# 故障告警
+【故障】api-health - 状态码
+code:500, threshold:200 URL:https://api.example.com
+
+# 恢复通知
+【恢复】api-health - 状态码
+code:200, threshold:200 URL:https://api.example.com
+
+# 超时告警
+【故障】api-health - 超时
+timeout:1 URL:https://api.example.com
+
+# 关键字匹配失败
+【故障】api-health - 关键字
+匹配字段:success, stat_math_str:1 URL:https://api.example.com
+
+# 响应时间过长
+【故障】api-health - 响应时间
+响应时间:1500ms, 预设:1000ms URL:https://api.example.com
+```
+
 ### 指标类型与判断方式
 
 | 指标类型 | 指标示例 | 正确判断方式 |
@@ -305,22 +376,24 @@ groups:
 ```
 url_check/
 ├── conf/
-│   ├── config.py      # 告警配置
-│   └── tasks.yaml     # 任务配置
+│   ├── config.py        # 告警配置（全局开关）
+│   ├── alerts.yaml      # 告警配置（细粒度）
+│   ├── alerts_config.py # 告警配置加载模块
+│   └── tasks.yaml       # 任务配置
 ├── view/
-│   ├── checke_control.py   # 结果处理 + 指标
+│   ├── checke_control.py    # 结果处理 + 指标 + 告警
 │   ├── make_check_instan.py # 任务创建 + HTTP
-│   └── hot_reload.py      # 配置热重载
+│   └── hot_reload.py       # 配置热重载
 ├── k8s/
-│   ├── deployment.yaml    # K8s 部署
-│   ├── service.yaml      # K8s 服务
-│   ├── ingress.yaml      # K8s 入口
+│   ├── deployment.yaml     # K8s 部署
+│   ├── service.yaml       # K8s 服务
+│   ├── ingress.yaml       # K8s 入口
 │   ├── kustomization.yaml
-│   └── RELOADER.md      # ConfigMap 热重载说明
+│   └── RELOADER.md       # ConfigMap 热重载说明
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
-└── url_check.py        # Flask 应用入口
+└── url_check.py         # Flask 应用入口
 ```
 
 ## API 接口

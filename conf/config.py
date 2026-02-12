@@ -8,7 +8,7 @@ send_to = ["hewei@raiyee.com"]
 history_datat_day = 3
 
 # =============================================================================
-# 告警开关配置
+# 告警开关配置（兼容旧版）
 # =============================================================================
 # enable_alerts: 总开关，控制是否发送任何告警通知
 #
@@ -42,6 +42,20 @@ enable_alerts = False  # 总开关
 enable_dingding = True  # 钉钉告警开关
 enable_mail = False  # 邮件告警开关（默认关闭，需配置 mail.ini）
 
+
+# =============================================================================
+# 新版告警配置（conf/alerts.yaml）
+# =============================================================================
+# 从 alerts_config.py 导入配置访问方法
+# 这些函数提供更细粒度的告警控制
+# =============================================================================
+from conf.alerts_config import (
+    is_alert_enabled,
+    get_alert_channels,
+    is_recover_enabled,
+    get_alert_type_info,
+    ALERT_TYPE_MAP,
+)
 
 dingding_url = "https://oapi.dingtalk.com/robot/send?"
 access_token = "6f3c39a23f1ce5ee22e888d9b1e61df18a61be7305ade92d179cfdfedda45e"

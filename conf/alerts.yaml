@@ -1,0 +1,48 @@
+# =============================================================================
+# 告警配置文件
+# =============================================================================
+# 说明：配置各类型告警的启用状态和通知渠道
+#
+# 告警类型 (name):
+#   - status_code: HTTP 状态码告警
+#   - timeout: 请求超时告警
+#   - content_match: 关键字匹配告警
+#   - delay: 响应时间过长告警
+#
+# 配置字段:
+#   - enabled: 是否启用该类告警 (true/false)
+#   - channels: 通知渠道列表
+#       - dingding: 钉钉通知
+#       - mail: 邮件通知
+#   - recover: 是否发送恢复通知 (true/false)
+#
+# 使用场景:
+#   - 仅钉钉: channels: [dingding]
+#   - 仅邮件: channels: [mail]
+#   - 全部渠道: channels: [dingding, mail]
+# =============================================================================
+
+alerts:
+  # 状态码告警
+  - name: status_code
+    enabled: true
+    channels: [dingding, mail]
+    recover: true
+
+  # 超时告警
+  - name: timeout
+    enabled: true
+    channels: [dingding]
+    recover: true
+
+  # 关键字匹配告警
+  - name: content_match
+    enabled: true
+    channels: [dingding, mail]
+    recover: true
+
+  # 响应时间告警
+  - name: delay
+    enabled: true
+    channels: [dingding]
+    recover: true
