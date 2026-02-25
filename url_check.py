@@ -41,14 +41,24 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 app = Flask(__name__)
 
-# =============================================================================
-# 初始化 URL 检查任务
-# =============================================================================
-# - 加载 conf/task.ini 配置
-# - 启动 APScheduler 定时调度器
-# =============================================================================
-lt = load_config()
-lt.loading_task()
+# Global scheduler instance (initialized lazily or by post_fork hook)
+scheduler_instance = None
+
+
+def _get_scheduler():
+    """Get the scheduler instance, initializing if necessary."""
+    global scheduler_instance
+    if scheduler_instance is None:
+        lt = load_config()
+        lt.loading_task()
+        scheduler_instance = lt
+
+        from conf import config
+        from view.make_check_instan import add_report_job
+
+        if config.report_enabled:
+            add_report_job(lt.sched, interval_hours=config.report_interval_hours)
+    return scheduler_instance
 
 
 @app.route("/sender/mail", methods=["POST"])
@@ -92,13 +102,13 @@ def task_opt():
 
         # 列出所有任务
         if "list_jobs" in data and data["list_jobs"] == 1:
-            job_list = lt.get_jobs()
+            job_list = _get_scheduler().get_jobs()
             return "{}".format(job_list)
 
         # 删除任务
         if "remove_job" in data:
             try:
-                lt.remove_job(task_name=data["remove_job"])
+                _get_scheduler().remove_job(task_name=data["remove_job"])
             except Exception as e:
                 print(e)
                 return "{}".format(e)
@@ -106,21 +116,21 @@ def task_opt():
         # 暂停任务
         if "stop_job" in data:
             try:
-                lt.stop_job(task_name=data["stop_job"])
+                _get_scheduler().stop_job(task_name=data["stop_job"])
             except Exception as e:
                 return "{}".format(e)
 
         # 恢复任务
         if "resume_job" in data:
             try:
-                lt.resume_job(task_name=data["resume_job"])
+                _get_scheduler().resume_job(task_name=data["resume_job"])
             except Exception as e:
                 return "{}".format(e)
 
         # 停止调度器
         if "shut_sched" in data and data["shut_sched"] == 1:
             try:
-                lt.shut_sched()
+                _get_scheduler().shut_sched()
             except Exception as e:
                 return "{}".format(e)
 
@@ -129,11 +139,11 @@ def task_opt():
             print(type(data))
             task_info = data["add_job"]
             print(task_info)
-            return "{}".format(lt.add_job(task_info=data["add_job"]))
+            return "{}".format(_get_scheduler().add_job(task_info=data["add_job"]))
 
         # 启动调度器
         if "start_sched" in data and data["start_sched"] == 1:
-            lt.start_sched()
+            _get_scheduler().start_sched()
 
         return "ok"
     return "{} False".format(data)
@@ -197,4 +207,4 @@ if __name__ == "__main__":
         from view.hot_reload import start_config_watcher
 
         start_config_watcher()
-    app.run(host="127.0.0.1", port=4000, debug=False)
+    app.run(host="0.0.0.0", port=4000, debug=False, threaded=True, use_reloader=False)

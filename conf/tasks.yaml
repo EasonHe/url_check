@@ -1,213 +1,168 @@
 # =============================================================================
-# URL 检查任务配置文件
-# =============================================================================
-# 格式：YAML
-# 说明：定义所有需要定时检查的 URL 任务
-#
-# 字段说明：
-#   - name: 任务名称（唯一标识，用于调度器 ID）
-#   - method: HTTP 方法（get, post, put, delete, head, options）
-#   - url: 要检查的 URL 地址
-#   - headers: HTTP 请求头（字典格式）
-#   - cookies: HTTP 请求 cookie（字典格式）
-#   - payload: 请求体数据（字典格式）
-#   - timeout: 超时时间（秒）
-#   - interval: 检查间隔（秒）
-#
-# 阈值配置（threshold）：
-#   - stat_code: 期望的 HTTP 状态码（默认 200）
-#   - delay: [最大响应时间(毫秒), 连续超次次数]
-#   - math_str: 要匹配的关键字（可选）
-#
-# 可选配置：
-#   - retry: 重试配置
-#       - count: 重试次数（默认 0，不重试）
-#       - delay: 重试间隔（秒，默认 1）
-#   - proxy: 代理地址
-#       - HTTP/HTTPS 代理，例如：http://127.0.0.1:7890
-#   - max_response_size: 最大响应大小（字节），超限跳过内容解析
-#       - 示例：1048576 = 1MB
-#       - 超限时仅记录警告，不影响状态码检查
-#   - expect_json: 期望 JSON 响应（true/false）
-#   - json_path: JSON Path 验证表达式（可选）
-#       - 示例：$.status, $.data.code, $.items[0].name
-#       - 需要配合 expect_json: true 使用
-#   - json_path_value: 期望的 JSON Path 值（字符串比较）
-#       - 留空表示只验证路径存在，不验证具体值
-#   - ssl: SSL 证书配置
-#       - verify: 是否验证 SSL 证书（true/false，默认 true）
-#           - true:  验证 SSL 证书（公网服务）
-#           - false: 跳过验证（内网私有证书）
-#       - warning_days: 证书剩余天数告警阈值（默认 30）
-#           - 0: 不检查证书有效期
-#           - 30: 证书剩余30天开始告警
+# URL 检查任务配置文件 - 完整测试配置
 # =============================================================================
 
 tasks:
-  # 任务1：百度首页（基础配置，验证 SSL）
-  - name: 百度首页
+  # ============ 1. SSL证书过期检查测试 ============
+  - name: test-ssl-expiry-check
     method: get
     url: https://www.baidu.com
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-    timeout: 5
-    interval: 5
-    threshold:
-      stat_code: 200
-      delay: [300, 2]
-      math_str: ""
-    max_response_size: 1048576  # 1MB
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # 任务2：云南移动服务（基础配置，验证 SSL）
-  - name: task1
-    method: get
-    url: https://ma.yn-10086.cn/ec-server/staff/init
-    headers:
-      Content-Type: application/json,text/plain
-      Referer: https://ma.yn-10086.cn/ec-server/10086/pc
-    timeout: 5
-    interval: 5
-    threshold:
-      stat_code: 200
-      delay: [500, 2]
-      math_str: ""
-    max_response_size: 524288  # 512KB
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # 任务3：外部API（带重试配置，验证 SSL）
-  - name: external-api
-    method: get
-    url: https://api.external.com/health
-    timeout: 10
-    interval: 60
-    threshold:
-      stat_code: 200
-      delay: [1000, 3]
-    retry:
-      count: 3       # 重试3次
-      delay: 2        # 每次间隔2秒
-    max_response_size: 10240  # 10KB
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # 任务4：通过代理检查（使用 Clash 代理）
-  - name: proxy-check
-    method: get
-    url: https://www.google.com
-    timeout: 10
-    interval: 300
-    threshold:
-      stat_code: 200
-      delay: [2000, 2]
-    proxy: http://127.0.0.1:7890  # 代理地址
-
-  # 任务5：内网服务（跳过 SSL 验证）
-  - name: internal-service
-    method: get
-    url: https://internal.company.com/api/health
-    timeout: 10
-    interval: 60
-    threshold:
-      stat_code: 200
-      delay: [1000, 2]
-    ssl:
-      verify: false  # 跳过 SSL 验证（内网私有证书）
-      warning_days: 0  # 不检查证书有效期
-
-  # 任务6：JSON API 验证示例（expect_json + json_path + json_path_value）
-  - name: json-api-health
-    method: get
-    url: https://jsonplaceholder.typicode.com/posts/1
     timeout: 10
     interval: 30
     threshold:
       stat_code: 200
-      math_str: ""
-    expect_json: true
-    json_path: "$.id"
-    json_path_value: "1"
     ssl:
       verify: true
-      warning_days: 30
+      warning_days: 9999
 
-  # 任务7：同时验证 JSON 和关键字
-  - name: json-with-keyword
+  # ============ 2. 跳过证书验证测试 ============
+  - name: test-ssl-skip-verify
     method: get
-    url: https://jsonplaceholder.typicode.com/todos/1
+    url: https://self-signed.badssl.com
     timeout: 10
     interval: 30
     threshold:
       stat_code: 200
-      math_str: "delectus"
-    expect_json: true
-    json_path: "$.completed"
-    json_path_value: "false"
     ssl:
-      verify: true
+      verify: false
       warning_days: 30
 
-  # ============================================
-  # 测试任务：验证 Prometheus 指标
-  # ============================================
-
-  # 测试1：内容匹配成功（body 包含 "quia"）
-  - name: test-content-match-success
+  # ============ 3. 状态码告警测试 ============
+  - name: test-status-code-alert
     method: get
-    url: https://jsonplaceholder.typicode.com/posts/1
+    url: https://httpbin.org/status/503
     timeout: 10
-    interval: 60
+    interval: 30
     threshold:
       stat_code: 200
-      math_str: "quia"  # 响应包含 "quia"
     ssl:
       verify: true
       warning_days: 30
 
-  # 测试2：内容匹配失败（body 不包含 "NOT_EXIST_KEYWORD"）
-  - name: test-content-match-fail
+  # ============ 4. 超时告警测试 ============
+  - name: test-timeout-alert
     method: get
-    url: https://jsonplaceholder.typicode.com/posts/1
-    timeout: 10
-    interval: 60
+    url: https://httpbin.org/delay/10
+    timeout: 3
+    interval: 30
     threshold:
       stat_code: 200
-      math_str: "NOT_EXIST_KEYWORD"  # 响应不包含此关键字
-    ssl:
-      verify: true
-      warning_days: 30
 
-  # 测试3：JSON Path 匹配成功
-  - name: test-json-path-success
+  # ============ 5. 关键字匹配告警测试 ============
+  - name: test-keyword-alert
     method: get
-    url: https://jsonplaceholder.typicode.com/posts/1
+    url: https://httpbin.org/json
     timeout: 10
-    interval: 60
+    interval: 30
     threshold:
       stat_code: 200
-    expect_json: true
-    json_path: "$.id"
-    json_path_value: "1"  # id = 1，匹配成功
+      math_str: "NON_EXISTENT_KEYWORD_XYZ"
     ssl:
       verify: true
       warning_days: 30
 
-  # 测试4：JSON Path 匹配失败
-  - name: test-json-path-fail
+  # ============ 6. JSON路径匹配告警测试 ============
+  - name: test-jsonpath-alert
     method: get
-    url: https://jsonplaceholder.typicode.com/posts/1
+    url: https://httpbin.org/json
     timeout: 10
-    interval: 60
+    interval: 30
     threshold:
       stat_code: 200
     expect_json: true
-    json_path: "$.id"
-    json_path_value: "999"  # id = 1，不匹配 999
+    json_path: "$.slideshow.author"
+    json_path_value: "WRONG_AUTHOR_NAME"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # ============ 7. 响应时间告警测试 ============
+  - name: test-delay-alert
+    method: get
+    url: https://httpbin.org/delay/2
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      delay: 300
+
+  # ============ 8. 综合测试任务 ============
+  - name: test-comprehensive
+    method: get
+    url: https://httpbin.org/json
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      math_str: "slideshow"
+      delay: 500
+    expect_json: true
+    json_path: "$.slideshow.author"
+    json_path_value: "Yours Truly"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # ============ 9. 综合测试-超时场景 ============
+  - name: test-comprehensive-timeout
+    method: get
+    url: https://httpbin.org/delay/10
+    timeout: 3
+    interval: 30
+    threshold:
+      stat_code: 200
+      math_str: "slideshow"
+    expect_json: true
+    json_path: "$.slideshow.author"
+    json_path_value: "Yours Truly"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # ============ 10. 综合测试-关键字场景 ============
+  - name: test-comprehensive-keyword
+    method: get
+    url: https://httpbin.org/json
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      math_str: "NON_EXISTENT_KEYWORD_XYZ"
+    expect_json: true
+    json_path: "$.slideshow.author"
+    json_path_value: "Yours Truly"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # ============ 11. 综合测试-状态码场景 ============
+  - name: test-comprehensive-status
+    method: get
+    url: https://httpbin.org/status/503
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      math_str: "slideshow"
+    expect_json: true
+    json_path: "$.slideshow.author"
+    json_path_value: "Yours Truly"
+    ssl:
+      verify: true
+      warning_days: 30
+
+  # ============ 12. 综合测试-JSON路径场景 ============
+  - name: test-comprehensive-jsonpath
+    method: get
+    url: https://httpbin.org/json
+    timeout: 10
+    interval: 30
+    threshold:
+      stat_code: 200
+      math_str: "slideshow"
+    expect_json: true
+    json_path: "$.slideshow.author"
+    json_path_value: "WRONG_AUTHOR"
     ssl:
       verify: true
       warning_days: 30

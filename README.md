@@ -36,13 +36,13 @@ python3 url_check.py
 ### Docker 运行
 
 ```bash
-docker build -t url-check:latest .
+docker build -t easonhe/url-checker:latest .
 docker run -d \
   --name url-check \
   -p 4000:4000 \
   -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf \
-  url-check:latest
+  easonhe/url-checker:latest
 ```
 
 ### Kubernetes 部署
@@ -58,7 +58,11 @@ kubectl logs -l app=url-check -f
 
 ## 配置说明
 
+告警联调与专项验证请参考：`docs/ALERT_TESTING.md`
+
 ### 任务配置 (conf/tasks.yaml)
+
+可直接使用示例文件 `conf/tasks.yaml.example` 作为起点。
 
 ```yaml
 tasks:
@@ -173,6 +177,8 @@ enable_mail = False     # 邮件开关
 ```
 
 #### 细粒度配置（新版，推荐）
+
+可直接使用示例文件 `conf/alerts.yaml.example` 作为起点。
 
 ```yaml
 # conf/alerts.yaml

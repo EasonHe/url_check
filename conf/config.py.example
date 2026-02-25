@@ -1,26 +1,27 @@
-# Flask 配置
-host = "0.0.0.0"
-port = 4000
-metrics_port = 9090
+# 与 conf/config.py 保持同名字段，复制后按需改值。
 
-# 任务配置
-tasks_config_path = "/home/appuser/conf/tasks.yaml"
+mail_conf = "conf/mail.ini"
+tasks_yaml = "conf/tasks.yaml"
 
-# 告警配置
+# 告警接收邮箱（enable_mail=True 时生效）
+send_to = ["ops@example.com"]
+history_datat_day = 3
+
+# 告警总开关与渠道开关
 enable_alerts = True
 enable_dingding = True
-enable_mail = True
+enable_mail = False
 
-# 钉钉配置
-dingding_webhook = "https://oapi.dingtalk.com/robot/send?access_token=YOUR_DINGDING_TOKEN"
-
-# 邮件配置
-mail_smtp_server = "smtp.example.com"
-mail_smtp_port = 465
-mail_sender = "alert@example.com"
-mail_sender_password = "YOUR_MAIL_PASSWORD"
-mail_receiver = "admin@example.com"
-
-# 告警日志配置
+# 告警日志
 alert_log_enabled = True
 alert_log_retention_days = 30
+
+# 钉钉机器人
+dingding_url = "https://oapi.dingtalk.com/robot/send?"
+access_token = "REPLACE_WITH_YOUR_DINGTALK_ACCESS_TOKEN"
+
+# 定时汇总报告
+report_enabled = True
+report_interval_hours = 2
+report_dingding_enabled = True
+report_mail_enabled = False

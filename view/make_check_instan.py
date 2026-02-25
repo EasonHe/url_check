@@ -23,13 +23,54 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import yaml
 import requests
 from requests import exceptions
+from requests.exceptions import HTTPError
 from conf import config
 import datetime
 from view.checke_control import cherker
 import time
+import ssl
+import socket
+from urllib.parse import urlparse
 
 # 全局 Session 用于连接池复用
 http_session = requests.Session()
+
+
+def get_ssl_cert_expiry_days(url, verify=True):
+    """
+    直接获取SSL证书剩余天数
+
+    Args:
+        url: 完整URL（如 https://example.com）
+        verify: 是否验证证书（如果为False则跳过检查）
+
+    Returns:
+        int: 剩余天数，获取失败或verify=False时返回 None
+    """
+    # 如果跳过证书验证，则不检查过期时间
+    if not verify:
+        return None
+
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port or 443
+
+        context = ssl.create_default_context()
+
+        with socket.create_connection((hostname, port), timeout=5) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                cert = ssock.getpeercert()
+                if cert and "notAfter" in cert:
+                    not_after_str = cert["notAfter"]
+                    not_after = datetime.datetime.strptime(
+                        not_after_str, "%b %d %H:%M:%S %Y %Z"
+                    )
+                    days = (not_after - datetime.datetime.now()).days
+                    return days
+    except Exception:
+        pass
+    return None
 
 
 class get_method:
@@ -85,9 +126,16 @@ class get_method:
             try:
                 data = {}
                 now_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                proxies = (
-                    {"http": self.proxy, "https": self.proxy} if self.proxy else None
-                )
+
+                # 处理 proxy 配置，支持 __HOST__ 关键字
+                proxy = self.proxy
+                if proxy:
+                    from conf import config
+
+                    host_ip = getattr(config, "HOST_IP", "host.docker.internal")
+                    proxy = proxy.replace("__HOST__", host_ip)
+
+                proxies = {"http": proxy, "https": proxy} if proxy else None
 
                 # SSL 验证配置
                 verify = self.ssl_verify
@@ -105,39 +153,23 @@ class get_method:
                 r.raise_for_status()
                 r.encoding = "utf-8"
 
-                # SSL 证书有效期检查
-                ssl_expiry_days = None
-                if (
-                    self.ssl_warning_days > 0
-                    and verify
-                    and r.url.startswith("https://")
-                ):
-                    try:
-                        cert = r.connection.sock.getpeercert()
-                        if cert and "notAfter" in cert:
-                            not_after_str = cert["notAfter"]
-                            # 解析证书过期时间
-                            # SSL 证书时间格式: "Sep 25 23:59:59 2024 GMT"
-                            not_after = datetime.datetime.strptime(
-                                not_after_str, "%b %d %H:%M:%S %Y %Z"
-                            )
-                            ssl_expiry_days = (not_after - datetime.datetime.now()).days
-                            print(f"SSL 证书剩余 {ssl_expiry_days} 天")
+                # SSL 证书有效期检查（使用独立函数）
+                ssl_expiry_days = get_ssl_cert_expiry_days(self.url, verify=verify)
+                if ssl_expiry_days is not None:
+                    print(f"SSL 证书剩余 {ssl_expiry_days} 天")
 
-                            # 更新 Prometheus 指标
-                            from view.checke_control import url_check_ssl_expiry_days
+                    # 更新 Prometheus 指标
+                    from view.checke_control import url_check_ssl_expiry_days
 
-                            url_check_ssl_expiry_days.labels(
-                                task_name=self.task_name, method="get"
-                            ).set(ssl_expiry_days)
+                    url_check_ssl_expiry_days.labels(
+                        task_name=self.task_name, method="get"
+                    ).set(ssl_expiry_days)
 
-                            # 证书即将过期告警
-                            if ssl_expiry_days < self.ssl_warning_days:
-                                print(
-                                    f"警告: {self.task_name} SSL 证书将在 {ssl_expiry_days} 天后过期"
-                                )
-                    except Exception as ssl_err:
-                        print(f"SSL 证书检查失败: {ssl_err}")
+                    # 证书即将过期告警
+                    if ssl_expiry_days < self.ssl_warning_days:
+                        print(
+                            f"警告: {self.task_name} SSL 证书将在 {ssl_expiry_days} 天后过期"
+                        )
 
                 # 更新 SSL 验证状态指标
                 from view.checke_control import url_check_ssl_verified
@@ -159,7 +191,7 @@ class get_method:
                 else:
                     content = r.text
 
-                retime = r.elapsed.microseconds / 1000
+                retime = r.elapsed.total_seconds() * 1000
                 statuscode = r.status_code
                 data = {
                     "url_name": self.task_name,
@@ -173,6 +205,34 @@ class get_method:
                     "expect_json": self.expect_json,
                     "json_path": self.json_path,
                     "json_path_value": self.json_path_value,
+                    "ssl_expiry_days": ssl_expiry_days,
+                    "ssl_warning_days": self.ssl_warning_days,
+                }
+                print(data)
+                ck = cherker(method="get")
+                ck.make_data(data)
+                return
+
+            except HTTPError as e:
+                last_error = e
+                # 修复：使用 is not None 而不是依赖布尔值判断
+                # 因为 Response 对象的 __bool__ 方法在 HTTP 错误时返回 False
+                status_code = e.response.status_code if e.response is not None else 0
+                print(f"警告: {self.task_name} HTTP错误: {status_code} {e}")
+                data = {
+                    "url_name": self.task_name,
+                    "url": self.url,
+                    "stat_code": status_code,
+                    "timeout": 0,
+                    "resp_time": 0,
+                    "contents": str(e),
+                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "threshold": self.threshold,
+                    "expect_json": self.expect_json,
+                    "json_path": self.json_path,
+                    "json_path_value": self.json_path_value,
+                    "ssl_expiry_days": None,
+                    "ssl_warning_days": self.ssl_warning_days,
                 }
                 print(data)
                 ck = cherker(method="get")
@@ -255,9 +315,16 @@ class post_method:
         for attempt in range(self.retry_count + 1):
             try:
                 data = {}
-                proxies = (
-                    {"http": self.proxy, "https": self.proxy} if self.proxy else None
-                )
+
+                # 处理 proxy 配置，支持 __HOST__ 关键字
+                proxy = self.proxy
+                if proxy:
+                    from conf import config
+
+                    host_ip = getattr(config, "HOST_IP", "host.docker.internal")
+                    proxy = proxy.replace("__HOST__", host_ip)
+
+                proxies = {"http": proxy, "https": proxy} if proxy else None
                 r = http_session.post(
                     self.url,
                     headers=self.header,
@@ -271,35 +338,23 @@ class post_method:
                 r.raise_for_status()
                 r.encoding = "utf-8"
 
-                # SSL 证书有效期检查
-                ssl_expiry_days = None
-                if (
-                    self.ssl_warning_days > 0
-                    and self.ssl_verify
-                    and r.url.startswith("https://")
-                ):
-                    try:
-                        cert = r.connection.sock.getpeercert()
-                        if cert and "notAfter" in cert:
-                            not_after_str = cert["notAfter"]
-                            not_after = datetime.datetime.strptime(
-                                not_after_str, "%b %d %H:%M:%S %Y %Z"
-                            )
-                            ssl_expiry_days = (not_after - datetime.datetime.now()).days
-                            print(f"SSL 证书剩余 {ssl_expiry_days} 天")
+                # SSL 证书有效期检查（使用独立函数）
+                ssl_expiry_days = get_ssl_cert_expiry_days(
+                    self.url, verify=self.ssl_verify
+                )
+                if ssl_expiry_days is not None:
+                    print(f"SSL 证书剩余 {ssl_expiry_days} 天")
 
-                            from view.checke_control import url_check_ssl_expiry_days
+                    from view.checke_control import url_check_ssl_expiry_days
 
-                            url_check_ssl_expiry_days.labels(
-                                task_name=self.task_name, method="post"
-                            ).set(ssl_expiry_days)
+                    url_check_ssl_expiry_days.labels(
+                        task_name=self.task_name, method="post"
+                    ).set(ssl_expiry_days)
 
-                            if ssl_expiry_days < self.ssl_warning_days:
-                                print(
-                                    f"警告: {self.task_name} SSL 证书将在 {ssl_expiry_days} 天后过期"
-                                )
-                    except Exception as ssl_err:
-                        print(f"SSL 证书检查失败: {ssl_err}")
+                    if ssl_expiry_days < self.ssl_warning_days:
+                        print(
+                            f"警告: {self.task_name} SSL 证书将在 {ssl_expiry_days} 天后过期"
+                        )
 
                 # 更新 SSL 验证状态指标
                 from view.checke_control import url_check_ssl_verified
@@ -323,7 +378,7 @@ class post_method:
                 else:
                     content = r.text
 
-                retime = r.elapsed.microseconds / 1000
+                retime = r.elapsed.total_seconds() * 1000
                 statuscode = r.status_code
                 data = {
                     "url_name": self.task_name,
@@ -337,6 +392,33 @@ class post_method:
                     "expect_json": self.expect_json,
                     "json_path": self.json_path,
                     "json_path_value": self.json_path_value,
+                    "ssl_expiry_days": ssl_expiry_days,
+                    "ssl_warning_days": self.ssl_warning_days,
+                }
+                print(data)
+                ck = cherker(method="post")
+                ck.make_data(data)
+                return
+
+            except HTTPError as e:
+                last_error = e
+                # 修复：使用 is not None 而不是依赖布尔值判断
+                status_code = e.response.status_code if e.response is not None else 0
+                print(f"警告: {self.task_name} HTTP错误: {status_code} {e}")
+                data = {
+                    "url_name": self.task_name,
+                    "url": self.url,
+                    "stat_code": status_code,
+                    "timeout": 0,
+                    "resp_time": 0,
+                    "contents": str(e),
+                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "threshold": self.threshold,
+                    "expect_json": self.expect_json,
+                    "json_path": self.json_path,
+                    "json_path_value": self.json_path_value,
+                    "ssl_expiry_days": None,
+                    "ssl_warning_days": self.ssl_warning_days,
                 }
                 print(data)
                 ck = cherker(method="post")
@@ -375,7 +457,12 @@ class load_config:
     def __init__(self):
         with open(config.tasks_yaml, "r", encoding="utf-8") as f:
             self.tasks = yaml.safe_load(f)
-        self.sched = BackgroundScheduler()
+
+        from apscheduler.executors.pool import ThreadPoolExecutor
+
+        executors = {"default": ThreadPoolExecutor(max_workers=5)}
+        job_defaults = {"coalesce": False, "max_instances": 3, "misfire_grace_time": 60}
+        self.sched = BackgroundScheduler(executors=executors, job_defaults=job_defaults)
 
     def config_set(self, task):
         """
@@ -607,3 +694,209 @@ class load_config:
 
     def start_sched(self):
         self.sched.start()
+
+
+class ReportTask:
+    """定时汇总报告任务"""
+
+    def __init__(self, interval_hours=2):
+        self.interval_hours = interval_hours
+
+    @staticmethod
+    def _parse_alerts(alarm):
+        """将 alarm 字典转换为可读告警列表"""
+        alarm = alarm or {}
+        labels = []
+        if alarm.get("code_warm") == 1:
+            labels.append("状态码")
+        if alarm.get("timeout_warm") == 1:
+            labels.append("超时")
+        if alarm.get("math_warm") == 1:
+            labels.append("关键字")
+        if alarm.get("json_warm") == 1:
+            labels.append("JSON路径")
+        if alarm.get("delay_warm") == 1:
+            labels.append("响应时间")
+        if alarm.get("ssl_warm") == 1:
+            labels.append("SSL证书")
+        return labels
+
+    @staticmethod
+    def _extract_latest_time(data, task_name):
+        """从持久化数据中提取任务最近一次检查时间"""
+        latest = None
+        for key, records in data.items():
+            if key in {"alarm", "alarm_notified", "last_alert_time", "last_resp_time"}:
+                continue
+            if not isinstance(records, list):
+                continue
+
+            for item in records:
+                if not isinstance(item, dict):
+                    continue
+                task_block = item.get(task_name)
+                if not isinstance(task_block, dict):
+                    continue
+                time_str = task_block.get("time")
+                if not time_str:
+                    continue
+                try:
+                    dt = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    continue
+                if latest is None or dt > latest:
+                    latest = dt
+        return latest
+
+    def generate_report(self):
+        """生成汇总报告"""
+        import pickle
+        import os
+
+        report_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        data_dir = "data"
+        normal_tasks = []
+        current_alert_tasks = []
+        notified_alert_tasks = []
+        no_data_tasks = []
+        stale_tasks = []
+        failed_tasks = []
+
+        configured_tasks = []
+        task_intervals = {}
+        try:
+            with open(config.tasks_yaml, "r", encoding="utf-8") as f:
+                task_conf = yaml.safe_load(f) or {}
+            configured_tasks = task_conf.get("tasks", [])
+            for task in configured_tasks:
+                name = task.get("name")
+                if name:
+                    task_intervals[name] = int(task.get("interval", 10))
+        except Exception as e:
+            return (
+                "📊 URL监控汇总报告",
+                f"汇总时间: {report_time}\n读取任务配置失败: {e}",
+            )
+
+        total_tasks = len([t for t in configured_tasks if t.get("name")])
+
+        for task in configured_tasks:
+            task_name = task.get("name")
+            if not task_name:
+                continue
+
+            filepath = os.path.join(data_dir, f"{task_name}.pkl")
+            if not os.path.exists(filepath):
+                no_data_tasks.append(f"- {task_name}")
+                continue
+
+            try:
+                with open(filepath, "rb") as f:
+                    data = pickle.load(f)
+            except Exception as e:
+                failed_tasks.append(f"- {task_name}: {e}")
+                continue
+
+            current_alerts = self._parse_alerts(data.get("alarm", {}))
+            notified_alerts = self._parse_alerts(
+                data.get("alarm_notified", data.get("alarm", {}))
+            )
+
+            if current_alerts:
+                current_alert_tasks.append(
+                    f"- {task_name}: {', '.join(current_alerts)}"
+                )
+            else:
+                normal_tasks.append(f"- {task_name}")
+
+            if notified_alerts:
+                notified_alert_tasks.append(
+                    f"- {task_name}: {', '.join(notified_alerts)}"
+                )
+
+            latest_time = self._extract_latest_time(data, task_name)
+            if latest_time is None:
+                stale_tasks.append(f"- {task_name}: 无有效检查时间")
+            else:
+                interval = task_intervals.get(task_name, 10)
+                stale_seconds = max(interval * 3, 180)
+                age = (datetime.datetime.now() - latest_time).total_seconds()
+                if age > stale_seconds:
+                    stale_tasks.append(
+                        f"- {task_name}: 最后检查 {latest_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+
+        msg = f"汇总时间: {report_time}\n"
+        msg += f"监控周期: {self.interval_hours}小时\n"
+        msg += f"配置任务总数: {total_tasks}个\n"
+        msg += f"有状态文件: {total_tasks - len(no_data_tasks)}个\n"
+        msg += f"无状态文件: {len(no_data_tasks)}个\n\n"
+
+        msg += f"✅ 当前正常: {len(normal_tasks)}个\n"
+        for task_line in normal_tasks:
+            msg += task_line + "\n"
+
+        msg += f"\n⚠️ 当前异常(按 alarm): {len(current_alert_tasks)}个\n"
+        for task_line in current_alert_tasks:
+            msg += task_line + "\n"
+
+        msg += f"\n📣 已通知异常(按 alarm_notified): {len(notified_alert_tasks)}个\n"
+        for task_line in notified_alert_tasks:
+            msg += task_line + "\n"
+
+        msg += f"\n❓ 无状态文件: {len(no_data_tasks)}个\n"
+        for task_line in no_data_tasks:
+            msg += task_line + "\n"
+
+        msg += f"\n🕒 数据过期/无时间: {len(stale_tasks)}个\n"
+        for task_line in stale_tasks:
+            msg += task_line + "\n"
+
+        if failed_tasks:
+            msg += f"\n⛔ 读取失败: {len(failed_tasks)}个\n"
+            for task_line in failed_tasks:
+                msg += task_line + "\n"
+
+        return "📊 URL监控汇总报告", msg
+
+    def send_report(self):
+        """发送汇总报告"""
+        from conf import config
+
+        if not config.report_enabled:
+            print("定时汇总报告未启用")
+            return
+
+        print("开始生成定时汇总报告...")
+        title, msg = self.generate_report()
+
+        if config.report_dingding_enabled:
+            from view.dingding import ding_report
+
+            ding_report(title=title, msg=msg)
+            print("钉钉汇总报告已发送")
+
+        if config.report_mail_enabled:
+            pass
+
+        print("定时汇总报告发送完成")
+
+
+def add_report_job(sched, interval_hours=2):
+    """添加定时汇总报告任务"""
+    from conf import config
+
+    if not config.report_enabled:
+        print("定时汇总报告未启用，跳过")
+        return
+
+    report_task = ReportTask(interval_hours=interval_hours)
+    sched.add_job(
+        report_task.send_report,
+        "interval",
+        hours=interval_hours,
+        id="report_task",
+        replace_existing=True,
+    )
+    print(f"定时汇总报告任务已启动，周期: {interval_hours}小时")

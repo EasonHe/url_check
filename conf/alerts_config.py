@@ -42,27 +42,51 @@ def is_recover_enabled(alert_name):
     return alert.get("recover", True) if alert else True
 
 
+def get_alert_suppress_minutes(alert_name, default=120):
+    """获取告警抑制时间（分钟）
+
+    Args:
+        alert_name: 告警类型名称
+        default: 默认抑制时间（分钟），默认120分钟
+
+    Returns:
+        int: 抑制时间（分钟），0表示不抑制
+    """
+    alert = get_alert_config(alert_name)
+    return alert.get("suppress_minutes", default) if alert else default
+
+
 # 告警类型映射（配置 name -> code key）
 ALERT_TYPE_MAP = {
     "status_code": {
         "code_key": "code_warm",
         "msg_key": "stat_code",
-        "name": "状态码",
+        "name": "状态码异常",
     },
     "timeout": {
         "code_key": "timeout_warm",
         "msg_key": "stat_timeout",
-        "name": "超时",
+        "name": "请求超时",
     },
     "content_match": {
         "code_key": "math_warm",
         "msg_key": "stat_math_str",
-        "name": "关键字",
+        "name": "关键字不匹配",
+    },
+    "json_path": {
+        "code_key": "json_warm",
+        "msg_key": "stat_json_path",
+        "name": "JSON验证失败",
     },
     "delay": {
         "code_key": "delay_warm",
         "msg_key": "stat_delay",
-        "name": "响应时间",
+        "name": "响应时间过长",
+    },
+    "ssl_expiry": {
+        "code_key": "ssl_warm",
+        "msg_key": "stat_ssl",
+        "name": "SSL证书过期",
     },
 }
 

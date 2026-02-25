@@ -10,5 +10,5 @@ commonLabels:
   app: url-check
 
 images:
-  - name: url-check
+  - name: easonhe/url-checker
     newTag: latest

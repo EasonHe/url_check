@@ -1,31 +1,45 @@
-# 告警配置（细粒度控制）
+# 告警配置示例（与 conf/alerts.yaml 字段保持一致）
+# name 可选值:
+#   - status_code
+#   - timeout
+#   - content_match
+#   - json_path
+#   - delay
+#   - ssl_expiry
+
 alerts:
-  # 状态码告警
   - name: status_code
     enabled: true
     channels: [dingding, mail]
     recover: true
+    suppress_minutes: 5
 
-  # 超时告警
   - name: timeout
     enabled: true
     channels: [dingding]
     recover: true
+    suppress_minutes: 5
 
-  # 关键字匹配告警
   - name: content_match
     enabled: true
     channels: [dingding, mail]
     recover: true
+    suppress_minutes: 5
 
-  # JSON 解析失败告警
-  - name: json_mismatch
+  - name: json_path
     enabled: true
     channels: [dingding, mail]
     recover: true
+    suppress_minutes: 5
 
-  # 响应时间告警
   - name: delay
     enabled: true
     channels: [dingding]
     recover: true
+    suppress_minutes: 5
+
+  - name: ssl_expiry
+    enabled: true
+    channels: [dingding]
+    recover: true
+    suppress_minutes: 5

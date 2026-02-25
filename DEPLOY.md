@@ -45,7 +45,7 @@ URL 健康检查服务是一个定时检查 URL 可用性的监控系统，支�
 cd /path/to/url_check
 
 # 构建镜像
-docker build -t url-check:latest .
+docker build -t easonhe/url-checker:latest .
 ```
 
 #### 2. 准备配置文件
@@ -119,14 +119,11 @@ metrics_port = 9090
 # 告警配置
 enable_alerts = True
 enable_dingding = True
-enable_mail = True
+enable_mail = False
 
-dingding_webhook = "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
-mail_smtp_server = "smtp.example.com"
-mail_smtp_port = 465
-mail_sender = "alert@example.com"
-mail_sender_password = "YOUR_PASSWORD"
-mail_receiver = "admin@example.com"
+dingding_url = "https://oapi.dingtalk.com/robot/send?"
+access_token = "YOUR_DINGDING_ACCESS_TOKEN"
+send_to = ["ops@example.com"]
 
 # 告警日志配置
 alert_log_enabled = True
@@ -165,7 +162,7 @@ docker run -d \
   -v $(pwd)/conf:/home/appuser/conf \
   -v $(pwd)/logs:/home/appuser/logs \
   -e TZ=Asia/Shanghai \
-  url-check:latest
+  easonhe/url-checker:latest
 ```
 
 **方式二：Docker Compose（推荐）**
@@ -177,7 +174,7 @@ version: '3.8'
 
 services:
   url-check:
-    image: url-check:latest
+    image: easonhe/url-checker:latest
     container_name: url-check
     restart: unless-stopped
     ports:
@@ -188,7 +185,7 @@ services:
       - ./logs:/home/appuser/logs
     environment:
       - TZ=Asia/Shanghai
-      - DINGDING_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx
+      - DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
       - MAIL_SMTP_SERVER=smtp.example.com
       - MAIL_SMTP_PORT=465
       - MAIL_SENDER=alert@example.com
@@ -213,7 +210,7 @@ docker-compose logs -f
 
 ```bash
 # 拉取镜像
-docker pull 192.168.8.8:9000/your-namespace/url_check:v20260212
+docker pull easonhe/url-checker:latest
 
 # 运行
 docker run -d \
@@ -221,7 +218,7 @@ docker run -d \
   -p 4000:4000 \
   -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf \
-  192.168.8.8:9000/your-namespace/url_check:v20260212
+  easonhe/url-checker:latest
 ```
 
 ---
@@ -239,13 +236,13 @@ docker run -d \
 ```bash
 # 构建镜像
 cd /path/to/url_check
-docker build -t 192.168.8.8:9000/your-namespace/url_check:v20260212 .
+docker build -t easonhe/url-checker:latest .
 
 # 登录镜像仓库
 docker login 192.168.8.8:9000
 
 # 推送镜像
-docker push 192.168.8.8:9000/your-namespace/url_check:v20260212
+docker push easonhe/url-checker:latest
 ```
 
 ### 步骤 2：创建命名空间
@@ -259,10 +256,7 @@ kubectl create namespace url-check
 ```bash
 # 创建 Secret 存储敏感配置
 kubectl create secret generic url-check-secrets \
-  --from-literal=dingding-webhook=https://oapi.dingtalk.com/robot/send?access_token=xxx \
-  --from-literal=mail-smtp-server=smtp.example.com \
-  --from-literal=mail-sender=alert@example.com \
-  --from-literal=mail-sender-password=password \
+  --from-literal=dingding-access-token=YOUR_DINGDING_ACCESS_TOKEN \
   --from-literal=mail-receiver=admin@example.com \
   -n url-check
 
@@ -424,16 +418,25 @@ alerts:
     enabled: true
     channels: [dingding, mail]
     recover: true
+    suppress_minutes: 5
 
-  - name: json_mismatch
+  - name: json_path
     enabled: true
     channels: [dingding, mail]
     recover: true
+    suppress_minutes: 5
 
   - name: delay
     enabled: true
     channels: [dingding]
     recover: true
+    suppress_minutes: 5
+
+  - name: ssl_expiry
+    enabled: true
+    channels: [dingding]
+    recover: true
+    suppress_minutes: 5
 ```
 
 ### 应用配置 (conf/config.py)
@@ -445,18 +448,15 @@ port = 4000
 metrics_port = 9090
 
 # 任务配置
-tasks_config_path = "/home/appuser/conf/tasks.yaml"
+tasks_yaml = "/home/appuser/conf/tasks.yaml"
 
 # 告警配置
 enable_alerts = True
 enable_dingding = True
-enable_mail = True
-dingding_webhook = "${DINGDING_WEBHOOK}"
-mail_smtp_server = "${MAIL_SMTP_SERVER}"
-mail_smtp_port = 465
-mail_sender = "${MAIL_SENDER}"
-mail_sender_password = "${MAIL_SENDER_PASSWORD}"
-mail_receiver = "${MAIL_RECEIVER}"
+enable_mail = False
+dingding_url = "https://oapi.dingtalk.com/robot/send?"
+access_token = "${DINGDING_ACCESS_TOKEN}"
+send_to = ["${MAIL_RECEIVER}"]
 
 # 告警日志配置
 alert_log_enabled = True
@@ -467,7 +467,7 @@ alert_log_retention_days = 30
 
 | 配置项 | Docker 环境变量 | K8s Secret | 说明 |
 |--------|-----------------|------------|------|
-| 钉钉 Webhook | `DINGDING_WEBHOOK` | `dingding-webhook` | 钉钉机器人地址 |
+| 钉钉 Access Token | `DINGDING_ACCESS_TOKEN` | `dingding-access-token` | 钉钉机器人 access_token |
 | SMTP 服务器 | `MAIL_SMTP_SERVER` | `mail-smtp-server` | 邮件发送服务器 |
 | SMTP 端口 | `MAIL_SMTP_PORT` | - | 默认 465 |
 | 发件人 | `MAIL_SENDER` | `mail-sender` | 发件邮箱 |
@@ -667,11 +667,12 @@ alerts:
     channels: [dingding, mail]
     recover: true
 
-  # JSON 解析失败告警
-  - name: json_mismatch
+  # JSON 路径匹配告警
+  - name: json_path
     enabled: true
     channels: [dingding, mail]
     recover: true
+    suppress_minutes: 5
 
   # 响应时间告警
   - name: delay
@@ -689,22 +690,19 @@ port = 4000
 metrics_port = 9090
 
 # 任务配置
-tasks_config_path = "/home/appuser/conf/tasks.yaml"
+tasks_yaml = "/home/appuser/conf/tasks.yaml"
 
 # 告警配置
 enable_alerts = True
 enable_dingding = True
-enable_mail = True
+enable_mail = False
 
 # 钉钉配置
-dingding_webhook = "https://oapi.dingtalk.com/robot/send?access_token=YOUR_DINGDING_TOKEN"
+dingding_url = "https://oapi.dingtalk.com/robot/send?"
+access_token = "YOUR_DINGDING_ACCESS_TOKEN"
 
 # 邮件配置
-mail_smtp_server = "smtp.example.com"
-mail_smtp_port = 465
-mail_sender = "alert@example.com"
-mail_sender_password = "YOUR_MAIL_PASSWORD"
-mail_receiver = "admin@example.com"
+send_to = ["admin@example.com"]
 
 # 告警日志配置
 alert_log_enabled = True
@@ -718,7 +716,7 @@ version: '3.8'
 
 services:
   url-check:
-    image: url-check:latest
+    image: easonhe/url-checker:latest
     container_name: url-check
     restart: unless-stopped
     ports:
@@ -729,7 +727,7 @@ services:
       - ./logs:/home/appuser/logs
     environment:
       - TZ=Asia/Shanghai
-      - DINGDING_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=YOUR_DINGDING_TOKEN
+      - DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
       - MAIL_SMTP_SERVER=smtp.example.com
       - MAIL_SMTP_PORT=465
       - MAIL_SENDER=alert@example.com
@@ -755,10 +753,7 @@ services:
 ```bash
 # 创建 Secret
 kubectl create secret generic url-check-secrets \
-  --from-literal=dingding-webhook=https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN \
-  --from-literal=mail-smtp-server=smtp.example.com \
-  --from-literal=mail-sender=alert@example.com \
-  --from-literal=mail-sender-password=YOUR_PASSWORD \
+  --from-literal=dingding-access-token=YOUR_DINGDING_ACCESS_TOKEN \
   --from-literal=mail-receiver=admin@example.com \
   -n url-check
 ```
@@ -793,7 +788,7 @@ spec:
     spec:
       containers:
         - name: url-check
-          image: 192.168.8.8:9000/your-namespace/url_check:v20260212
+          image: easonhe/url-checker:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4000
@@ -803,11 +798,11 @@ spec:
           env:
             - name: FLASK_ENV
               value: "production"
-            - name: DINGDING_WEBHOOK
+            - name: DINGDING_ACCESS_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: url-check-secrets
-                  key: dingding-webhook
+                  key: dingding-access-token
             - name: MAIL_SMTP_SERVER
               valueFrom:
                 secretKeyRef:
@@ -919,7 +914,7 @@ data:
         enabled: true
         channels: [dingding, mail]
         recover: true
-      - name: json_mismatch
+      - name: json_path
         enabled: true
         channels: [dingding, mail]
         recover: true
@@ -937,16 +932,13 @@ data:
     host = "0.0.0.0"
     port = 4000
     metrics_port = 9090
-    tasks_config_path = "/home/appuser/conf/tasks.yaml"
+    tasks_yaml = "/home/appuser/conf/tasks.yaml"
     enable_alerts = True
     enable_dingding = True
-    enable_mail = True
-    dingding_webhook = "${DINGDING_WEBHOOK}"
-    mail_smtp_server = "${MAIL_SMTP_SERVER}"
-    mail_smtp_port = 465
-    mail_sender = "${MAIL_SENDER}"
-    mail_sender_password = "${MAIL_SENDER_PASSWORD}"
-    mail_receiver = "${MAIL_RECEIVER}"
+    enable_mail = False
+    dingding_url = "https://oapi.dingtalk.com/robot/send?"
+    access_token = "${DINGDING_ACCESS_TOKEN}"
+    send_to = ["${MAIL_RECEIVER}"]
     alert_log_enabled = True
     alert_log_retention_days = 30
 ---
@@ -1142,14 +1134,14 @@ docker exec url-check netstat -ant | wc -l
 
 ```bash
 # 重新构建
-docker build -t url-check:latest .
+docker build -t easonhe/url-checker:latest .
 
 # 停止并删除旧容器
 docker stop url-check
 docker rm url-check
 
 # 启动新容器
-docker run -d ... url-check:latest
+docker run -d ... easonhe/url-checker:latest
 ```
 
 ### Docker Compose 更新
@@ -1166,7 +1158,7 @@ docker-compose up -d
 
 ```bash
 kubectl set image deployment/url-check \
-  url-check=192.168.8.8:9000/your-namespace/url_check:v20260212 \
+  url-check=easonhe/url-checker:latest \
   -n url-check
 ```
 
@@ -1273,7 +1265,7 @@ rate(url_check_http_timeout_total[5m])
 
 ```bash
 # 启动
-docker run -d --name url-check -p 4000:4000 -p 9090:9090 -v $(pwd)/conf:/home/appuser/conf url-check:latest
+docker run -d --name url-check -p 4000:4000 -p 9090:9090 -v $(pwd)/conf:/home/appuser/conf easonhe/url-checker:latest
 
 # 停止
 docker stop url-check
@@ -1301,7 +1293,7 @@ kubectl logs -n url-check -l app=url-check -f
 kubectl rollout restart deployment/url-check -n url-check
 
 # 更新镜像
-kubectl set image deployment/url-check url-check=192.168.8.8:9000/your-namespace/url_check:v20260212 -n url-check
+kubectl set image deployment/url-check url-check=easonhe/url-checker:latest -n url-check
 
 # 回滚
 kubectl rollout undo deployment/url-check -n url-check

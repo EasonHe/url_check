@@ -222,9 +222,17 @@ class cherker:
             "code_warm": 0,
             "delay_warm": 0,
             "math_warm": 0,
+            "json_warm": 0,
             "timeout_warm": 0,
+            "ssl_warm": 0,
         }
         self.message = {}
+        self.last_alert_time = {}  # {alert_type: datetime}
+        self.last_resp_time = None  # 上次响应时间（毫秒）
+        self._prev_resp_time = None  # 发送告警前的响应时间
+        self._has_http_response = False
+        self._json_parse_ok = False
+        self._json_path_ok = False
 
     def validate_json(
         self, content, expect_json=False, json_path_expr=None, json_path_value=None
@@ -245,23 +253,23 @@ class cherker:
             json_path_value: 期望的 JSON Path 值（字符串比较）
 
         Returns:
-            tuple: (json_parse_ok, json_path_ok)
+            tuple: (json_parse_ok, json_path_ok, actual_value)
                 - json_parse_ok: JSON 解析是否成功
                 - json_path_ok: JSON Path 验证是否通过
+                - actual_value: JSON Path 提取的实际值（字符串）
         """
         json_parse_ok = False
         json_path_ok = False
+        actual_value = None
         json_data = None
 
         if not expect_json:
             url_check_json_valid.labels(
                 task_name=self.task_name or "", method=self.method or ""
             ).set(0)
-            return True, True
+            return True, True, None
 
         try:
-            import json
-
             json_data = json.loads(content)
             json_parse_ok = True
             url_check_json_valid.labels(
@@ -271,10 +279,10 @@ class cherker:
             url_check_json_valid.labels(
                 task_name=self.task_name or "", method=self.method or ""
             ).set(0)
-            return False, False
+            return False, False, None
 
         if not json_path_expr:
-            return True, True
+            return True, True, None
 
         try:
             from jsonpath_ng import parse
@@ -311,9 +319,11 @@ class cherker:
             task_name=self.task_name or "", method=self.method or ""
         ).set(1 if json_path_ok else 0)
 
-        return json_parse_ok, json_path_ok
+        return json_parse_ok, json_path_ok, actual_value
 
-    def _send_alert_if_needed(self, alert_name, alarm, threshold, is_recovery=False):
+    def _send_alert_if_needed(
+        self, alert_name, alarm, threshold, is_recovery=False, is_first_run=False
+    ):
         """统一处理告警/恢复通知
 
         Args:
@@ -325,7 +335,7 @@ class cherker:
         # 获取告警类型信息
         alert_info = config.get_alert_type_info(alert_name)
         if not alert_info:
-            return
+            return None
 
         code_key = alert_info.get("code_key")
         msg_key = alert_info.get("msg_key")
@@ -333,31 +343,135 @@ class cherker:
 
         # 检查是否启用
         if not config.enable_alerts or not config.is_alert_enabled(alert_name):
-            return
+            return None
 
         # 获取通知渠道
         channels = config.get_alert_channels(alert_name)
 
         # 判断是否需要发送
-        # 故障发生：now_alarm=1, alarm=0
-        # 恢复通知：now_alarm=0, alarm=1
+        # 首次运行：只发送故障告警
+        # 后续运行：
+        #   - 故障发生：now_alarm=1, alarm=0
+        #   - 恢复通知：now_alarm=0, alarm=1
         need_send = False
         subject = ""
+        recovery_event = bool(is_recovery)
 
-        if self.now_alarm[code_key] == 1 and alarm[code_key] == 0:
-            # 故障发生
-            subject = "【故障】{} - {}".format(self.task_name, alert_display_name)
-            need_send = True
-        elif is_recovery and self.now_alarm[code_key] == 0 and alarm[code_key] == 1:
-            # 恢复通知
-            if config.is_recover_enabled(alert_name):
-                subject = "【恢复】{} - {}".format(self.task_name, alert_display_name)
+        if is_first_run:
+            # 首次运行：故障发生才发送
+            if self.now_alarm[code_key] == 1:
+                subject = "🚨 【故障】{} - {}".format(
+                    self.task_name, alert_display_name
+                )
                 need_send = True
+        else:
+            # 后续运行：故障发生或恢复才发送
+            if self.now_alarm[code_key] == 1 and alarm[code_key] == 0:
+                # 故障发生
+                subject = "🚨 【故障】{} - {}".format(
+                    self.task_name, alert_display_name
+                )
+                need_send = True
+            elif self.now_alarm[code_key] == 0 and alarm[code_key] == 1:
+                # 恢复通知
+                if config.is_recover_enabled(alert_name):
+                    subject = "✅ 【恢复】{} - {}".format(
+                        self.task_name, alert_display_name
+                    )
+                    need_send = True
+                    recovery_event = True
 
         if not need_send or not msg_key:
-            return
+            return None
+
+        # 恢复通知防呆：只有当前检查结果可验证为“恢复”时才允许发送
+        if (
+            recovery_event
+            and alert_name == "status_code"
+            and not self._has_http_response
+        ):
+            return None
+
+        if (
+            recovery_event
+            and alert_name == "content_match"
+            and not self._has_http_response
+        ):
+            return None
+
+        if recovery_event and alert_name == "json_path":
+            if not (
+                self._has_http_response and self._json_parse_ok and self._json_path_ok
+            ):
+                return None
+
+        # 对于 delay 告警，检查当前响应时间是否仍然超限
+        # 如果当前响应时间超限，发送故障告警而不是恢复通知
+        if recovery_event and alert_name == "delay" and self.last_resp_time is not None:
+            delay_val = threshold.get("delay") if threshold else 0
+            if isinstance(delay_val, list):
+                expect_delay = delay_val[0]
+            elif isinstance(delay_val, int):
+                expect_delay = delay_val
+            else:
+                expect_delay = 0
+            # 检查当前响应时间是否超限
+            current_resp = self.last_resp_time  # 当前响应时间
+            if current_resp > expect_delay:
+                # 当前响应时间仍然超限，应该发送故障告警而不是恢复
+                recovery_event = False
+                need_send = True
+                subject = "🚨 【故障】{} - {}".format(
+                    self.task_name, alert_display_name
+                )
 
         msg = self.message.get(msg_key, "")
+
+        # 恢复通知时，显示当前响应时间
+        if recovery_event and alert_name == "delay":
+            # 使用当前响应时间生成消息
+            current_resp = self.last_resp_time
+            if current_resp is not None:
+                delay_val = threshold.get("delay") if threshold else 0
+                if isinstance(delay_val, list):
+                    expect_delay = delay_val[0]
+                elif isinstance(delay_val, int):
+                    expect_delay = delay_val
+                else:
+                    expect_delay = 0
+                current_delay_status = "超限" if current_resp > expect_delay else "正常"
+                time_str = (
+                    self.message.get("stat_delay", "unknown")
+                    .split("时间: ")[-1]
+                    .split("\n")[0]
+                    if self.message.get("stat_delay")
+                    else "unknown"
+                )
+                msg = "- 期望: <{}ms\n- 实际: {}ms\n- 状态: {}\n- 时间: {}\n- URL: {}".format(
+                    expect_delay,
+                    round(current_resp, 2),
+                    current_delay_status,
+                    time_str,
+                    self.message.get("stat_delay", "").split("URL: ")[-1]
+                    if self.message.get("stat_delay")
+                    else self.task_name,
+                )
+
+        # 静默期检查（故障告警才检查，恢复通知和首次运行不受限制）
+        suppress_minutes = config.get_alert_suppress_minutes(alert_name)
+        if suppress_minutes > 0 and not recovery_event and not is_first_run:
+            last_time = self.last_alert_time.get(alert_name)
+            if last_time:
+                elapsed = (datetime.datetime.now() - last_time).total_seconds() / 60
+                if elapsed < suppress_minutes:
+                    logger.info(
+                        "告警抑制: %s - %s 在静默期内(%.1f/%dmin), 跳过发送",
+                        self.task_name,
+                        alert_display_name,
+                        elapsed,
+                        suppress_minutes,
+                    )
+                    return None
 
         # 发送钉钉
         if "dingding" in channels and config.enable_dingding:
@@ -368,35 +482,48 @@ class cherker:
             mailconf(tos=config.send_to, subject=subject, content=msg)
 
         # 写入独立告警日志（JSON 格式）
-        log_level = "WARNING" if not is_recovery else "INFO"
+        log_level = "WARNING" if not recovery_event else "INFO"
         _write_alert_log(
-            alert_type="故障" if not is_recovery else "恢复",
+            alert_type="故障" if not recovery_event else "恢复",
             task_name=self.task_name,
             message=f"{subject} | {msg}",
             level=log_level,
         )
 
-    def send_warm(self, alarm=None, threshold=None):
+        # 记录故障告警发送时间（恢复通知不记录，以便故障再次发生时能立即告警）
+        if not recovery_event:
+            self.last_alert_time[alert_name] = datetime.datetime.now()
+
+        return 0 if recovery_event else 1
+
+    def send_warm(self, alarm=None, threshold=None, is_first_run=False):
         """发送告警通知（支持配置化）
 
-        功能：
-            - 根据配置决定是否发送告警/恢复通知
-            - 支持按告警类型配置通知渠道
-
-        配置来源：
-            - conf/alerts.yaml: 各类型告警的启用状态和渠道
-            - conf/config.py: 全局开关 (enable_alerts, enable_dingding, enable_mail)
+        Args:
+            alarm: 上次已发送告警状态字典
+            threshold: 配置阈值字典
+            is_first_run: 是否是首次运行
         """
-        # 告警类型列表
-        alert_types = ["status_code", "timeout", "content_match", "delay"]
+        notified_alarm = (alarm or {}).copy()
+        alert_types = [
+            "status_code",
+            "timeout",
+            "content_match",
+            "json_path",
+            "delay",
+            "ssl_expiry",
+        ]
 
-        # 发送故障告警
         for alert_name in alert_types:
-            self._send_alert_if_needed(alert_name, alarm, threshold, is_recovery=False)
+            sent_state = self._send_alert_if_needed(
+                alert_name, notified_alarm, threshold, is_first_run=is_first_run
+            )
+            alert_info = config.get_alert_type_info(alert_name) or {}
+            code_key = alert_info.get("code_key")
+            if code_key and sent_state is not None:
+                notified_alarm[code_key] = sent_state
 
-        # 发送恢复通知
-        for alert_name in alert_types:
-            self._send_alert_if_needed(alert_name, alarm, threshold, is_recovery=True)
+        return notified_alarm
 
     def first_run_task(self, status_data, threshold, time, datafile):
         """
@@ -414,6 +541,7 @@ class cherker:
             datafile: 持久化文件路径（data/{task_name}.pkl）
         """
         temp_dict = {}
+        self.last_resp_time = status_data[self.task_name].get("delay")
         # 开始设置为0,都是对的，如果出现错误则修改状态码
 
         if status_data[self.task_name]["stat_code"] == 1:
@@ -436,13 +564,38 @@ class cherker:
                 )
             )
 
+        # 添加 JSON 路径告警处理（修复）
+        if status_data[self.task_name].get("json_warm") == 1:
+            self.now_alarm["json_warm"] = 1
+            print("{} JSON路径验证失败".format(self.task_name))
+
+        # 添加 SSL 证书告警处理
+        if status_data[self.task_name].get("ssl_warm") == 1:
+            self.now_alarm["ssl_warm"] = 1
+            print("{} SSL证书即将过期".format(self.task_name))
+
         # 根据内容发送消息
-        alarm = {"code_warm": 0, "delay_warm": 0, "math_warm": 0, "timeout_warm": 0}
-        self.send_warm(alarm=alarm, threshold=threshold)
+        # 首次运行：发送故障告警
+        notified_alarm = {
+            "code_warm": 0,
+            "delay_warm": 0,
+            "math_warm": 0,
+            "timeout_warm": 0,
+            "json_warm": 0,
+            "ssl_warm": 0,
+        }
+        temp_dict["last_alert_time"] = {}
+        # 第一次运行时，使用全0的已发送状态参与边沿判断
+        notified_alarm = self.send_warm(
+            alarm=notified_alarm, threshold=threshold, is_first_run=True
+        )
 
         # 录入当前检查的alarm状态信息
         temp_dict["alarm"] = self.now_alarm
-        print("录入", temp_dict)
+        temp_dict["alarm_notified"] = notified_alarm
+        temp_dict["last_alert_time"] = self.last_alert_time
+        temp_dict["last_resp_time"] = self.last_resp_time
+        print("录入, last_alert_time=", self.last_alert_time, "alarm=", self.now_alarm)
         # 录入原始信息
         temp_dict[time.split()[0]] = [(status_data)]
         # print(temp_dict)
@@ -476,6 +629,9 @@ class cherker:
         json_path_value = data_dict.get("json_path_value")
 
         method = self.method or "unknown"
+        json_path_ok = False
+        json_parse_ok = False
+        actual_value = None
 
         # ==========================================================================
         # 1. 暴露原始数据指标（供 Prometheus 判断）
@@ -505,7 +661,7 @@ class cherker:
                 ).info({"body": content_info})
 
             # JSON 解析结果（应用层判断）
-            json_parse_ok, json_path_ok = self.validate_json(
+            json_parse_ok, json_path_ok, actual_value = self.validate_json(
                 content,
                 expect_json=expect_json,
                 json_path_expr=json_path,
@@ -549,12 +705,16 @@ class cherker:
                 0
             )
 
+        self._has_http_response = code >= 0
+        self._json_parse_ok = json_parse_ok
+        self._json_path_ok = json_path_ok
+
         # ==========================================================================
         # 2. 全部验证（要数据说话）
         # ==========================================================================
 
-        # 状态码验证
-        if code != -1 and code != threshold.get("stat_code", 200):
+        # 状态码验证（非超时情况，code>=0表示有HTTP响应）
+        if code >= 0 and code != threshold.get("stat_code", 200):
             self.stat_code = 1
         else:
             self.stat_code = 0
@@ -565,15 +725,45 @@ class cherker:
         else:
             self.stat_math_str = 0
 
+        # JSON路径验证状态
+        if code != -1 and json_path and json_path_value is not None:
+            self.now_alarm["json_warm"] = 0 if json_path_ok else 1
+        else:
+            self.now_alarm["json_warm"] = 0
+
         # 响应时间验证
         if code != -1 and "delay" in threshold:
-            self.delay = 0 if rs_time < threshold["delay"][0] else 1
+            delay_val = threshold["delay"]
+            if isinstance(delay_val, list):
+                delay_threshold = delay_val[0]
+            else:
+                delay_threshold = delay_val
+            self.delay = 0 if rs_time < delay_threshold else 1
         else:
             self.delay = 0
 
         # ==========================================================================
         # 3. 生成状态数据和告警消息
         # ==========================================================================
+
+        # SSL证书告警处理（需要在生成 status_data 之前执行）
+        ssl_expiry_days = data_dict.get("ssl_expiry_days")
+        ssl_warning_days = data_dict.get("ssl_warning_days", 30)
+        if ssl_expiry_days is not None:
+            if ssl_expiry_days < ssl_warning_days:
+                self.now_alarm["ssl_warm"] = 1
+                self.message["stat_ssl"] = (
+                    "- 剩余: {}天\n- 阈值: {}天\n- 时间: {}\n- URL: {}".format(
+                        ssl_expiry_days, ssl_warning_days, time, data_dict["url"]
+                    )
+                )
+            else:
+                self.now_alarm["ssl_warm"] = 0
+                self.message["stat_ssl"] = (
+                    "- 剩余: {}天\n- 阈值: {}天\n- 时间: {}\n- URL: {}".format(
+                        ssl_expiry_days, ssl_warning_days, time, data_dict["url"]
+                    )
+                )
 
         status_data = {
             self.task_name: {
@@ -583,41 +773,86 @@ class cherker:
                 "delay": rs_time,
                 "stat_delay": self.delay,
                 "stat_math_str": self.stat_math_str,
-                "timeout": self.timeout,
+                "json_warm": self.now_alarm.get("json_warm", 0),
+                "ssl_warm": self.now_alarm.get("ssl_warm", 0),
+                "timeout": data_dict.get("timeout", 0),
                 "time": time,
             }
         }
 
-        # 告警消息
-        self.message["stat_code"] = "code:{}，threshold:{} URL:{}".format(
-            code,
-            threshold.get("stat_code", 200),
-            data_dict["url"],
+        # 告警消息 - 简洁版
+        expect_code = threshold.get("stat_code", 200)
+        self.message["stat_code"] = (
+            "- 期望: {}\n- 实际: {}\n- 时间: {}\n- URL: {}".format(
+                expect_code, code, time, data_dict["url"]
+            )
         )
-        self.message["stat_timeout"] = "timeout:{} URL:{}".format(
-            data_dict["timeout"], data_dict["url"]
+
+        expect_timeout = threshold.get("timeout", 10)
+        timeout_actual = "超时" if data_dict.get("timeout", 0) == 1 else "正常"
+        self.message["stat_timeout"] = (
+            "- 期望: {}秒\n- 实际: {}\n- 时间: {}\n- URL: {}".format(
+                expect_timeout,
+                timeout_actual,
+                time,
+                data_dict["url"],
+            )
         )
-        self.message["stat_math_str"] = "匹配字段:{}, stat_math_str:{} URL:{}".format(
-            threshold.get("math_str", ""),
-            self.stat_math_str,
-            data_dict["url"],
+
+        math_str = threshold.get("math_str", "")
+        math_status = "不匹配" if self.stat_math_str == 1 else "匹配"
+        self.message["stat_math_str"] = (
+            "- 关键字: {}\n- 状态: {}\n- 时间: {}\n- URL: {}".format(
+                math_str, math_status, time, data_dict["url"]
+            )
         )
-        self.message["stat_delay"] = "响应时间:{}ms, 预设:{}ms URL:{}".format(
-            rs_time,
-            threshold.get("delay", [0])[0] if "delay" in threshold else 0,
-            data_dict["url"],
+
+        # 响应时间告警消息
+        delay_val = threshold.get("delay")
+        if isinstance(delay_val, list):
+            expect_delay = delay_val[0]
+        elif isinstance(delay_val, int):
+            expect_delay = delay_val
+        else:
+            expect_delay = 0
+        delay_status = "超限" if self.delay == 1 else "正常"
+        self.message["stat_delay"] = (
+            "- 期望: <{}ms\n- 实际: {}ms\n- 状态: {}\n- 时间: {}\n- URL: {}".format(
+                expect_delay, round(rs_time, 2), delay_status, time, data_dict["url"]
+            )
         )
+
+        # JSON路径匹配告警消息
+        if json_path and json_path_value is not None:
+            expected_json_value = str(json_path_value)
+            if not self._has_http_response:
+                actual_json_value = "未校验"
+                json_status = "未校验（请求失败）"
+            elif not json_parse_ok:
+                actual_json_value = "未校验"
+                json_status = "未校验（非JSON响应）"
+            else:
+                actual_json_value = actual_value if actual_value else "null"
+                json_status = "不匹配" if not json_path_ok else "匹配"
+            self.message["stat_json_path"] = (
+                "- 路径: {}\n"
+                "- 期望: {}\n"
+                "- 实际: {}\n"
+                "- 状态: {}\n"
+                "- 时间: {}\n"
+                "- URL: {}".format(
+                    json_path,
+                    expected_json_value,
+                    actual_json_value,
+                    json_status,
+                    time,
+                    data_dict["url"],
+                )
+            )
 
         # ==========================================================================
         # 4. 持久化和告警（保持原有逻辑）
         # ==========================================================================
-
-        datafile = "data/{}.pkl".format(self.task_name)
-
-        if not os.path.exists(datafile):
-            self.first_run_task(status_data, threshold, time, datafile)
-        else:
-            pass  # 保持原有持久化和告警逻辑
 
         # 根据任务分类，才不会出现io 冲突
         datafile = "data/{}.pkl".format(self.task_name)  # 文件名字
@@ -631,6 +866,8 @@ class cherker:
             f = open(datafile, "rb")
             temp_dict = pickle.load(f)
             f.close()
+            self.last_alert_time = temp_dict.get("last_alert_time", {})
+            self.last_resp_time = temp_dict.get("last_resp_time")
             # 保留时间数目
             histroy_day = (
                 datetime.datetime.now()
@@ -643,56 +880,15 @@ class cherker:
                 today_list = temp_dict[time.split()[0]]
                 # print(today_list)
 
-                # 如果响应时间超时,我们设置连续超时多少次才告警
+                # 响应时间告警：1次超限就告警（与其他告警类型一致）
                 if status_data[self.task_name]["stat_delay"] == 1:
-                    # 检查次数
-                    num = threshold["delay"][1]
-                    # 检查
-                    if len(today_list) + 1 >= num:
-                        # 切割出最后的几次检查的次数的list
-                        temp_list = today_list[-(num - 1) :]
-                        # 初始超时次数为0，如果循环后发现都是超时的那么告警，设置delay_warm =1
-                        c = 0
-                        for his_data in temp_list:
-                            if his_data[self.task_name]["stat_delay"] == 1:
-                                c += 1
-                        if c == num - 1:
-                            print(
-                                "{} 检查{}次，超过设定时间最后一次{}毫秒".format(
-                                    self.task_name,
-                                    num,
-                                    status_data[self.task_name]["delay"],
-                                )
-                            )
-                            self.now_alarm["delay_warm"] = 1
-
-                    else:
-                        # 如果今天检查的次数不够设置告警，则取出昨天的来计算
-                        yes_time = (
-                            datetime.datetime.now() + datetime.timedelta(days=-1)
-                        ).strftime("%Y-%m-%d")
-                        neednum = num - len(today_list) - 1
-                        if (
-                            yes_time in temp_dict
-                            and len(temp_dict[yes_time]) >= neednum
-                        ):
-                            temp_list = temp_dict[yes_time][-(neednum):]
-                            temp_list.extend(today_list)
-                            c = 0
-                            for his_data in temp_list:
-                                if his_data[self.task_name]["stat_delay"] != 1:
-                                    break
-                                else:
-                                    c += 1
-                            if c == num - 1:
-                                print(
-                                    "{} 检查{}次，超过设定时间最后一次{}毫秒".format(
-                                        self.task_name,
-                                        num,
-                                        status_data[self.task_name]["delay"],
-                                    )
-                                )
-                                self.now_alarm["delay_warm"] = 1
+                    print(
+                        "{} 响应时间超过阈值{}ms".format(
+                            self.task_name,
+                            status_data[self.task_name]["delay"],
+                        )
+                    )
+                    self.now_alarm["delay_warm"] = 1
 
                 # temp_dict 之前保存的所有数据
                 temp_dict[key].append(status_data)
@@ -700,28 +896,15 @@ class cherker:
 
             # key不在现有的字典
             else:
-                yes_time = (
-                    datetime.datetime.now() + datetime.timedelta(days=-1)
-                ).strftime("%Y-%m-%d")
+                # 响应时间告警：1次超限就告警
                 if status_data[self.task_name]["stat_delay"] == 1:
-                    num = threshold["delay"][1]
-                    if yes_time in temp_dict and len(temp_dict[yes_time]) >= num - 1:
-                        c = 0
-                        temp_list = temp_dict[yes_time][-(num - 1) :]
-                        for his_data in temp_list:
-                            if his_data[self.task_name]["stat_delay"] != 1:
-                                break
-                            else:
-                                c += 1
-                        if c == num - 1:
-                            print(
-                                "{} 检查{}次，超过设定时间最后一次{}毫秒".format(
-                                    self.task_name,
-                                    num,
-                                    status_data[self.task_name]["delay"],
-                                )
-                            )
-                            self.now_alarm["delay_warm"] = 1
+                    print(
+                        "{} 响应时间超过阈值{}ms".format(
+                            self.task_name,
+                            status_data[self.task_name]["delay"],
+                        )
+                    )
+                    self.now_alarm["delay_warm"] = 1
                 # 设置今天的第一个字典为空
                 temp_dict[key] = []
                 temp_dict[key].append(status_data)
@@ -747,15 +930,46 @@ class cherker:
             # 根据开关决定是否发送告警通知
             # enable_alerts = True: 发送钉钉/邮件告警
             # enable_alerts = False: 仅收集 Prometheus 指标（通过 Alertmanager 告警）
+            # 先保存上次的响应时间（在更新之前）
+            self._prev_resp_time = self.last_resp_time
+            self.last_resp_time = status_data[self.task_name].get("delay", rs_time)
+
+            # 仅使用“已发送状态”做故障/恢复边沿判断，避免抑制导致的伪恢复
+            notified_alarm = temp_dict.get(
+                "alarm_notified",
+                temp_dict.get(
+                    "alarm",
+                    {
+                        "code_warm": 0,
+                        "delay_warm": 0,
+                        "math_warm": 0,
+                        "timeout_warm": 0,
+                        "json_warm": 0,
+                        "ssl_warm": 0,
+                    },
+                ),
+            )
             if config.enable_alerts:
-                self.send_warm(alarm=temp_dict["alarm"], threshold=threshold)
+                notified_alarm = self.send_warm(
+                    alarm=notified_alarm,
+                    threshold=threshold,
+                    is_first_run=False,
+                )
             else:
                 logger.debug("告警通知已禁用（enable_alerts=False），跳过 send_warm")
-            temp_dict["alarm"] = self.now_alarm
             if histroy_day in temp_dict:
                 # 根据配置文件删除历史数据保留天数
                 del temp_dict[histroy_day]
-            print("第二次写入")
+            temp_dict["last_alert_time"] = self.last_alert_time
+            temp_dict["last_resp_time"] = self.last_resp_time
+            temp_dict["alarm"] = self.now_alarm
+            temp_dict["alarm_notified"] = notified_alarm
+            print(
+                "第二次写入, last_alert_time=",
+                self.last_alert_time,
+                "alarm=",
+                self.now_alarm,
+            )
             # print(temp_dict)
             with open(datafile, "wb") as f:
                 pickle.dump(temp_dict, f)

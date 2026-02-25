@@ -5,7 +5,7 @@ metadata:
   labels:
     app: url-check
   annotations:
-    configmap.reloader.stakater.com/reload: "url-check-tasks"
+    configmap.reloader.stakater.com/reload: "url-check-tasks,url-check-alerts,url-check-config"
 spec:
   replicas: 1
   selector:
@@ -16,14 +16,14 @@ spec:
       labels:
         app: url-check
       annotations:
-        configmap.reloader.stakater.com/reload: "url-check-tasks"
+        configmap.reloader.stakater.com/reload: "url-check-tasks,url-check-alerts,url-check-config"
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: url-check
-          image: 192.168.8.8:9000/hewei/url_check:v20260212
+          image: easonhe/url-checker:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4000
@@ -33,6 +33,18 @@ spec:
           env:
             - name: FLASK_ENV
               value: "production"
+            - name: DINGDING_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: url-check-secrets
+                  key: dingding-access-token
+                  optional: true
+            - name: MAIL_RECEIVER
+              valueFrom:
+                secretKeyRef:
+                  name: url-check-secrets
+                  key: mail-receiver
+                  optional: true
           resources:
             requests:
               memory: "64Mi"
@@ -211,18 +223,32 @@ data:
         enabled: true
         channels: [dingding, mail]
         recover: true
+        suppress_minutes: 5
       - name: timeout
         enabled: true
         channels: [dingding]
         recover: true
-      - name: json_mismatch
+        suppress_minutes: 5
+      - name: content_match
         enabled: true
         channels: [dingding, mail]
         recover: true
-      - name: content_mismatch
+        suppress_minutes: 5
+      - name: json_path
+        enabled: true
+        channels: [dingding, mail]
+        recover: true
+        suppress_minutes: 5
+      - name: delay
         enabled: true
         channels: [dingding]
         recover: true
+        suppress_minutes: 5
+      - name: ssl_expiry
+        enabled: true
+        channels: [dingding]
+        recover: true
+        suppress_minutes: 5
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -230,25 +256,35 @@ metadata:
   name: url-check-config
 data:
   config.py: |
-    # Flask 配置
-    host = "0.0.0.0"
-    port = 4000
-    metrics_port = 9090
+    import os
 
-    # 任务配置
-    tasks_config_path = "/home/appuser/conf/tasks.yaml"
+    mail_conf = "conf/mail.ini"
+    tasks_yaml = "/home/appuser/conf/tasks.yaml"
+    send_to = [
+        x.strip() for x in os.getenv("MAIL_RECEIVER", "").split(",") if x.strip()
+    ] or ["ops@example.com"]
+    history_datat_day = 3
 
-    # 告警配置
     enable_alerts = True
     enable_dingding = True
-    enable_mail = True
-    dingding_webhook = "${DINGDING_WEBHOOK}"
-    mail_smtp_server = "${MAIL_SMTP_SERVER}"
-    mail_smtp_port = 465
-    mail_sender = "${MAIL_SENDER}"
-    mail_sender_password = "${MAIL_SENDER_PASSWORD}"
-    mail_receiver = "${MAIL_RECEIVER}"
+    enable_mail = False
 
-    # 告警日志配置
+    from conf.alerts_config import (
+        is_alert_enabled,
+        get_alert_channels,
+        is_recover_enabled,
+        get_alert_type_info,
+        get_alert_suppress_minutes,
+        ALERT_TYPE_MAP,
+    )
+
+    dingding_url = "https://oapi.dingtalk.com/robot/send?"
+    access_token = os.getenv("DINGDING_ACCESS_TOKEN", "")
+
     alert_log_enabled = True
     alert_log_retention_days = 30
+
+    report_enabled = True
+    report_interval_hours = 2
+    report_dingding_enabled = True
+    report_mail_enabled = False

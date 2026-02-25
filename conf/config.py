@@ -38,7 +38,7 @@ history_datat_day = 3
 #     annotations:
 #       summary: "URL {{ $labels.task_name }} 检查失败"
 # =============================================================================
-enable_alerts = False  # 总开关
+enable_alerts = True  # 总开关（测试时开启）
 enable_dingding = True  # 钉钉告警开关
 enable_mail = False  # 邮件告警开关（默认关闭，需配置 mail.ini）
 
@@ -54,11 +54,12 @@ from conf.alerts_config import (
     get_alert_channels,
     is_recover_enabled,
     get_alert_type_info,
+    get_alert_suppress_minutes,
     ALERT_TYPE_MAP,
 )
 
 dingding_url = "https://oapi.dingtalk.com/robot/send?"
-access_token = "6f3c39a23f1ce5ee22e888d9b1e61df18a61be7305ade92d179cfdfedda45e"
+access_token = "b4b5792b89a8dd4ac97e26194ed903cee523b11c4bd31fba87819e5cf1803d2b"
 
 # =============================================================================
 # 告警日志配置
@@ -83,3 +84,28 @@ access_token = "6f3c39a23f1ce5ee22e888d9b1e61df18a61be7305ade92d179cfdfedda45e"
 # =============================================================================
 alert_log_enabled = True
 alert_log_retention_days = 30
+
+# =============================================================================
+# 定时汇总报告配置
+# =============================================================================
+# report_enabled: 是否启用定时汇总报告
+#   True:  启用定时汇总报告
+#   False: 禁用
+#
+# report_interval_hours: 汇总周期（小时）
+#   1: 每小时汇总一次
+#   2: 每2小时汇总一次
+#   24: 每天汇总一次
+#
+# report_dingding_enabled: 钉钉汇总报告开关
+#   True:  发送钉钉汇总报告
+#   False: 不发送
+#
+# report_mail_enabled: 邮件汇总报告开关
+#   True:  发送邮件汇总报告
+#   False: 不发送
+# =============================================================================
+report_enabled = True  # 默认开启
+report_interval_hours = 2  # 默认2小时
+report_dingding_enabled = True  # 钉钉汇总报告
+report_mail_enabled = False  # 邮件汇总报告
