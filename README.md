@@ -46,13 +46,24 @@ cp .env.example .env.local
 ### Docker 运行
 
 ```bash
+# 准备运行时环境变量
+cp .env.example .env
+
+# 按需修改 .env（至少要填 URL_CHECK_DINGDING_ACCESS_TOKEN）
+
+# 构建并运行
 docker build -t easonhe/url-checker:latest .
 docker run -d \
   --name url-check \
+  --env-file .env \
   -p 4000:4000 \
   -p 9090:9090 \
-  -v $(pwd)/conf:/home/appuser/conf \
+  -v $(pwd)/conf:/home/appuser/conf:ro \
+  -v $(pwd)/logs:/home/appuser/logs \
   easonhe/url-checker:latest
+
+# 查看日志
+docker logs -f url-check
 ```
 
 ### Kubernetes 部署

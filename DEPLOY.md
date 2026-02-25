@@ -67,7 +67,7 @@ mkdir -p conf logs
 # 复制配置模板
 cp conf/tasks.yaml.example conf/tasks.yaml
 cp conf/alerts.yaml.example conf/alerts.yaml
-cp conf/config.py.example conf/config.py
+cp .env.example .env
 ```
 
 #### 3. 编辑配置
@@ -75,13 +75,23 @@ cp conf/config.py.example conf/config.py
 > **提示**: 项目提供了完整的配置模板，可直接复制使用：
 > - `conf/tasks.yaml.example` - 任务配置模板（10 种场景示例）
 > - `conf/alerts.yaml.example` - 告警配置模板
-> - `conf/config.py.example` - 应用配置模板
+> - `.env.example` - 运行时环境变量模板
 
 ```bash
 # 复制配置模板
 cp conf/tasks.yaml.example conf/tasks.yaml
 cp conf/alerts.yaml.example conf/alerts.yaml
-cp conf/config.py.example conf/config.py
+cp .env.example .env
+```
+
+编辑 `.env`（至少填写钉钉 token）：
+
+```bash
+URL_CHECK_DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
+URL_CHECK_ENABLE_ALERTS=true
+URL_CHECK_ENABLE_DINGDING=true
+URL_CHECK_ENABLE_MAIL=false
+URL_CHECK_MAIL_RECEIVERS=ops@example.com
 ```
 
 编辑 `conf/tasks.yaml`（完整示例见 `conf/tasks.yaml.example`）：
@@ -118,27 +128,7 @@ tasks:
       warning_days: 30
 ```
 
-编辑 `conf/config.py`（完整示例见 `conf/config.py.example`）：
-
-```python
-# Flask 配置
-host = "0.0.0.0"
-port = 4000
-metrics_port = 9090
-
-# 告警配置
-enable_alerts = True
-enable_dingding = True
-enable_mail = False
-
-dingding_url = "https://oapi.dingtalk.com/robot/send?"
-access_token = "YOUR_DINGDING_ACCESS_TOKEN"
-send_to = ["ops@example.com"]
-
-# 告警日志配置
-alert_log_enabled = True
-alert_log_retention_days = 30
-```
+> 说明：无需手工修改 `conf/config.py`，运行时统一通过 `.env` / 环境变量注入配置。
 
 编辑 `conf/alerts.yaml`（完整示例见 `conf/alerts.yaml.example`）：
 
@@ -167,6 +157,7 @@ alerts:
 ```bash
 docker run -d \
   --name url-check \
+  --env-file .env \
   -p 4000:4000 \
   -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf \
@@ -193,15 +184,17 @@ services:
     volumes:
       - ./conf:/home/appuser/conf:ro
       - ./logs:/home/appuser/logs
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Shanghai
-      - URL_CHECK_DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
-      - URL_CHECK_MAIL_RECEIVERS=admin@example.com
       - URL_CHECK_ENABLE_ALERTS=true
       - URL_CHECK_ENABLE_DINGDING=true
       - URL_CHECK_ENABLE_MAIL=false
+      - URL_CHECK_REPORT_ENABLED=true
+      - URL_CHECK_REPORT_INTERVAL_HOURS=2
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health', timeout=2)"]
       interval: 30s
       timeout: 3s
       start_period: 10s
