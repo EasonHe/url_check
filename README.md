@@ -125,6 +125,34 @@ tasks:
 | `payload` | 否 | - | POST 请求体 |
 | `proxy` | 否 | - | 代理地址 |
 
+### 代理配置示例
+
+```yaml
+# 本机直接运行（代理在本机 7890）
+- name: with-local-proxy
+  method: get
+  url: https://httpbin.org/get
+  timeout: 10
+  interval: 60
+  threshold:
+    stat_code: 200
+  proxy: http://127.0.0.1:7890
+
+# 容器运行（代理在宿主机 7890）
+- name: with-host-proxy
+  method: get
+  url: https://httpbin.org/get
+  timeout: 10
+  interval: 60
+  threshold:
+    stat_code: 200
+  proxy: http://__HOST__:7890
+```
+
+说明：
+- `proxy` 同时作用于 HTTP/HTTPS 请求。
+- 当使用 `__HOST__` 时，程序会替换为 `host.docker.internal`，用于容器访问宿主机代理。
+
 ### 阈值配置 (threshold)
 
 | 字段 | 必填 | 默认值 | 说明 |

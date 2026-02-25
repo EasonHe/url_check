@@ -386,6 +386,20 @@ tasks:
 | `payload` | 否 | - | POST 请求体 |
 | `proxy` | 否 | - | 代理地址 |
 
+### 代理使用说明
+
+```yaml
+# 本机开发（代理监听 127.0.0.1:7890）
+proxy: http://127.0.0.1:7890
+
+# 容器内运行（访问宿主机代理）
+proxy: http://__HOST__:7890
+```
+
+说明：
+- `proxy` 会同时应用到 HTTP 和 HTTPS。
+- `__HOST__` 会在运行时替换为 `host.docker.internal`，方便容器访问宿主机代理。
+
 ### 阈值配置 (threshold)
 
 | 字段 | 必填 | 默认值 | 说明 |
@@ -560,7 +574,7 @@ tasks:
     threshold:
       stat_code: 200
       delay: [2000, 2]
-    proxy: http://127.0.0.1:7890
+    proxy: http://__HOST__:7890
     ssl:
       verify: true
       warning_days: 30

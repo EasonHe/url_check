@@ -33,6 +33,22 @@ tasks:
       verify: true
       warning_days: 30
 
+  - name: production-via-proxy
+    method: get
+    url: https://httpbin.org/get
+    timeout: 10
+    interval: 120
+    threshold:
+      stat_code: 200
+      delay: 2000
+    # 代理地址示例：
+    # - 本机运行：proxy: http://127.0.0.1:7890
+    # - 容器运行：proxy: http://__HOST__:7890  (会替换为 host.docker.internal)
+    proxy: http://__HOST__:7890
+    ssl:
+      verify: true
+      warning_days: 30
+
   # ---------------------------------------------------------------------------
   # 联调示例任务（故意不匹配）
   # ---------------------------------------------------------------------------
