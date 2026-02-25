@@ -18,14 +18,24 @@
 
 ## 快速开始
 
-### 本地运行
+### 本地运行（推荐使用统一入口脚本）
 
 ```bash
 # 安装依赖
 pip install -r requirements.txt
 
-# 启动服务
-python3 url_check.py
+# 准备本地环境变量
+cp .env.example .env.local
+
+# 检查配置并启动
+./dev.sh check
+./dev.sh up
+
+# 冒烟测试
+./dev.sh test
+
+# 停止服务
+./dev.sh down
 
 # 服务地址
 # - Web UI: http://127.0.0.1:4000

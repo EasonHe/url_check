@@ -28,6 +28,16 @@ URL 健康检查服务是一个定时检查 URL 可用性的监控系统，支�
 | 配置热重载 | ConfigMap 变更自动重载 |
 | Prometheus | /metrics 指标暴露 |
 
+### 本地开发统一入口
+
+```bash
+cp .env.example .env.local
+./dev.sh check
+./dev.sh up
+./dev.sh test
+./dev.sh down
+```
+
 ---
 
 ## Docker 部署

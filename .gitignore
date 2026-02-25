@@ -20,3 +20,7 @@ data/
 
 # Editor
 .vscode/
+
+# Local environment
+.env
+.env.local
