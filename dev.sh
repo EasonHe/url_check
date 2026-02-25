@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$ROOT_DIR/logs"
 PID_FILE="$LOG_DIR/dev.pid"
 RUN_LOG="$LOG_DIR/dev_run.log"
+PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
 
 load_env() {
   if [[ ! -f "$ROOT_DIR/.env" && ! -f "$ROOT_DIR/.env.local" ]]; then
@@ -64,7 +69,7 @@ start_service() {
     exit 0
   fi
 
-  nohup python3 "$ROOT_DIR/url_check.py" >"$RUN_LOG" 2>&1 &
+  nohup "$PYTHON_BIN" "$ROOT_DIR/url_check.py" >"$RUN_LOG" 2>&1 &
   echo $! >"$PID_FILE"
   sleep 1
 
