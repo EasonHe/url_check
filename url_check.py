@@ -200,6 +200,8 @@ if __name__ == "__main__":
     #   - 通过环境变量 KUBERNETES_SERVICE_HOST 检测
     # =============================================================================
 
+    port = int(os.getenv("URL_CHECK_PORT", "4000"))
+
     if os.environ.get("KUBERNETES_SERVICE_HOST"):
         print("ℹ️ K8s 环境检测，跳过 watchdog 文件监听")
         print("ℹ️ 配置变更请使用: kubectl rollout restart deployment url-check")
@@ -207,4 +209,10 @@ if __name__ == "__main__":
         from view.hot_reload import start_config_watcher
 
         start_config_watcher()
-    app.run(host="0.0.0.0", port=4000, debug=False, threaded=True, use_reloader=False)
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        threaded=True,
+        use_reloader=False,
+    )

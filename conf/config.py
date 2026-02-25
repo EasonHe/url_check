@@ -152,6 +152,7 @@ report_enabled = _env_bool("URL_CHECK_REPORT_ENABLED", True)
 report_interval_hours = _env_int("URL_CHECK_REPORT_INTERVAL_HOURS", 2)
 report_dingding_enabled = _env_bool("URL_CHECK_REPORT_DINGDING_ENABLED", True)
 report_mail_enabled = _env_bool("URL_CHECK_REPORT_MAIL_ENABLED", False)
+strict_config = _env_bool("URL_CHECK_STRICT_CONFIG", False)
 
 
 def _masked(value):
@@ -163,10 +164,17 @@ def _masked(value):
 
 
 def validate_config():
+    errors = []
     if enable_alerts and enable_dingding and not access_token:
-        print("[config] warning: URL_CHECK_DINGDING_ACCESS_TOKEN is empty")
+        errors.append("URL_CHECK_DINGDING_ACCESS_TOKEN is empty")
     if enable_alerts and enable_mail and not send_to:
-        print("[config] warning: URL_CHECK_MAIL_RECEIVERS is empty")
+        errors.append("URL_CHECK_MAIL_RECEIVERS is empty")
+
+    for err in errors:
+        print(f"[config] warning: {err}")
+
+    if strict_config and errors:
+        raise RuntimeError("invalid runtime config: " + "; ".join(errors))
 
 
 def print_config_summary():
@@ -181,6 +189,7 @@ def print_config_summary():
             _masked(access_token),
         )
     )
+    print(f"[config] strict_config={strict_config}")
 
 
 validate_config()

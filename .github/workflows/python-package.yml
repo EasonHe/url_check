@@ -38,3 +38,6 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+    - name: Alert regression checks
+      run: |
+        python scripts/qa/alert_regression.py

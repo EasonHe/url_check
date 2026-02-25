@@ -62,3 +62,7 @@ report_enabled = _env_bool("URL_CHECK_REPORT_ENABLED", True)
 report_interval_hours = _env_int("URL_CHECK_REPORT_INTERVAL_HOURS", 2)
 report_dingding_enabled = _env_bool("URL_CHECK_REPORT_DINGDING_ENABLED", True)
 report_mail_enabled = _env_bool("URL_CHECK_REPORT_MAIL_ENABLED", False)
+
+# Optional strict mode:
+# when true, missing required vars for enabled channels will fail fast.
+strict_config = _env_bool("URL_CHECK_STRICT_CONFIG", False)

@@ -34,6 +34,9 @@ cp .env.example .env.local
 # 冒烟测试
 ./dev.sh test
 
+# 告警回归检查（防伪恢复）
+.venv/bin/python scripts/qa/alert_regression.py
+
 # 停止服务
 ./dev.sh down
 

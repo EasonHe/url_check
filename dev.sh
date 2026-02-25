@@ -6,6 +6,7 @@ LOG_DIR="$ROOT_DIR/logs"
 PID_FILE="$LOG_DIR/dev.pid"
 RUN_LOG="$LOG_DIR/dev_run.log"
 PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+HOST="127.0.0.1"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
   PYTHON_BIN="python3"
@@ -57,8 +58,28 @@ show_config() {
   echo "  dingding: ${URL_CHECK_ENABLE_DINGDING:-true}"
   echo "  mail:     ${URL_CHECK_ENABLE_MAIL:-false}"
   echo "  report:   ${URL_CHECK_REPORT_ENABLED:-true}"
+  echo "  port:     ${URL_CHECK_PORT:-4000}"
   echo "  token:    $(mask "${URL_CHECK_DINGDING_ACCESS_TOKEN:-}")"
   echo "  receivers:${URL_CHECK_MAIL_RECEIVERS:-}"
+}
+
+check_port() {
+  local port="${URL_CHECK_PORT:-4000}"
+  "$PYTHON_BIN" - <<PY
+import socket
+import sys
+
+host = "${HOST}"
+port = int("${port}")
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    s.bind((host, port))
+except OSError:
+    print(f"[dev] port {port} is already in use")
+    sys.exit(1)
+finally:
+    s.close()
+PY
 }
 
 start_service() {
@@ -68,6 +89,8 @@ start_service() {
     echo "[dev] already running (pid=$(cat "$PID_FILE"))"
     exit 0
   fi
+
+  check_port
 
   nohup "$PYTHON_BIN" "$ROOT_DIR/url_check.py" >"$RUN_LOG" 2>&1 &
   echo $! >"$PID_FILE"
@@ -100,9 +123,13 @@ stop_service() {
 }
 
 smoke_test() {
-  python3 - <<'PY'
+  "$PYTHON_BIN" - <<PY
 import json
 import urllib.request
+import os
+
+port = int(os.getenv('URL_CHECK_PORT', '4000'))
+base = f'http://127.0.0.1:{port}'
 
 def get(url):
     with urllib.request.urlopen(url, timeout=5) as r:
@@ -118,8 +145,8 @@ def post(url, payload):
     with urllib.request.urlopen(req, timeout=5) as r:
         return r.read().decode('utf-8')
 
-print('[dev] /health =>', get('http://127.0.0.1:4000/health'))
-print('[dev] /job/opt list_jobs =>', post('http://127.0.0.1:4000/job/opt', {'list_jobs': 1}))
+print('[dev] /health =>', get(base + '/health'))
+print('[dev] /job/opt list_jobs =>', post(base + '/job/opt', {'list_jobs': 1}))
 PY
 }
 
@@ -153,6 +180,7 @@ main() {
       stop_service
       ;;
     test)
+      load_env
       smoke_test
       ;;
     *)
