@@ -17,3 +17,6 @@ instance/
 
 # Data
 data/
+
+# Editor
+.vscode/
