@@ -10,40 +10,67 @@
   "liveNow": false,
   "panels": [
     {
+      "id": 901,
+      "type": "row",
+      "title": "① 总览 / Overview",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 201,
+      "type": "stat",
+      "title": "全局拨测成功率 / Global Probe Success Rate",
+      "description": "拨测失败定义：状态码不匹配或超时。1 个任务失败记为 0%，正常记为 100%。",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * avg(1 - clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"}, 1))"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
+          "unit": "percent",
+          "decimals": 2,
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
               }
             ]
           }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 0
-      },
-      "id": 101,
       "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -51,18 +78,70 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 202,
+      "type": "stat",
+      "title": "当前拨测失败任务数 / Current Failed Tasks",
+      "description": "失败任务 = 状态码不匹配 或 超时（去重后计数）。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
       },
       "targets": [
         {
-          "expr": "count(url_check_http_status_code{task_name=~\"$task\"})",
-          "legendFormat": "",
-          "refId": "A"
+          "refId": "A",
+          "expr": "sum(clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"}, 1))"
         }
       ],
-      "title": "任务总数 / Total Tasks",
-      "type": "stat",
-      "description": "当前被采集到的任务数量 / Number of tasks currently scraped."
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
     },
     {
       "datasource": {
@@ -92,10 +171,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 12,
+        "y": 1,
         "w": 6,
-        "x": 6,
-        "y": 0
+        "h": 4
       },
       "id": 102,
       "options": {
@@ -151,10 +230,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 18,
+        "y": 1,
         "w": 6,
-        "x": 12,
-        "y": 0
+        "h": 4
       },
       "id": 103,
       "options": {
@@ -199,6 +278,61 @@
               {
                 "color": "green",
                 "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 8,
+        "h": 4
+      },
+      "id": 101,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(url_check_http_status_code{task_name=~\"$task\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "任务总数 / Total Tasks",
+      "type": "stat",
+      "description": "当前被采集到的任务数量 / Number of tasks currently scraped."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
               },
               {
                 "color": "yellow",
@@ -214,10 +348,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 0
+        "x": 8,
+        "y": 5,
+        "w": 8,
+        "h": 4
       },
       "id": 104,
       "options": {
@@ -241,9 +375,143 @@
           "refId": "A"
         }
       ],
-      "title": "5分钟超时速率 / Timeout Rate (5m)",
+      "title": "5分钟超时增长速率（次/秒，总览） / Timeout Growth Rate (5m, per second, Overview)",
       "type": "stat",
-      "description": "最近 5 分钟全局超时速率 / Global timeout increase rate in 5 minutes."
+      "description": "基于 rate(url_check_http_timeout_total[5m])，表示超时计数器每秒增长量，不是5分钟总次数。"
+    },
+    {
+      "id": 204,
+      "type": "bargauge",
+      "title": "失败原因拆分 / Failure Reason Breakdown",
+      "description": "按当前任务状态统计失败原因数量。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(url_check_timeout_alert{task_name=~\"$task\"})",
+          "legendFormat": "超时 / Timeout"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(url_check_status_code_alert{task_name=~\"$task\"})",
+          "legendFormat": "状态码不匹配 / Status Mismatch"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 203,
+      "type": "timeseries",
+      "title": "按任务拨测成功率（%） / Probe Success Rate by Task",
+      "description": "每个任务实时成功率：100%（成功）或 0%（失败）。失败定义同上。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"}, 1))",
+          "legendFormat": "{{task_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 902,
+      "type": "row",
+      "title": "② 快速定位 / Diagnosis",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
     },
     {
       "datasource": {
@@ -259,10 +527,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 0,
-        "y": 4
+        "y": 18,
+        "w": 12,
+        "h": 8
       },
       "id": 1,
       "options": {
@@ -296,10 +564,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
-        "y": 4
+        "y": 18,
+        "w": 12,
+        "h": 8
       },
       "id": 2,
       "options": {
@@ -315,9 +583,9 @@
           "refId": "A"
         }
       ],
-      "title": "超时速率（5分钟） / Timeout Rate (5m)",
+      "title": "5分钟超时增长速率（次/秒） / Timeout Growth Rate (5m, per second)",
       "type": "timeseries",
-      "description": "基于 5 分钟窗口的超时增长速率 / Timeout increase rate in last 5 minutes."
+      "description": "基于 rate(url_check_http_timeout_total[5m])，表示超时计数器每秒增长量，不是5分钟总次数。"
     },
     {
       "datasource": {
@@ -334,10 +602,98 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 0,
-        "y": 12
+        "y": 26,
+        "w": 12,
+        "h": 9
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "topk(5, histogram_quantile(0.95, sum by (le, task_name) (rate(url_check_http_response_time_ms_bucket{task_name=~\"$task\"}[5m]))))",
+          "legendFormat": "{{task_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "慢任务 Top5（P95） / Top5 Slow Tasks by P95",
+      "type": "timeseries",
+      "description": "响应时间 P95 最高的前 5 个任务 / Top 5 tasks with highest P95 response time."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 9
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "topk(5, rate(url_check_http_timeout_total{task_name=~\"$task\"}[5m]))",
+          "legendFormat": "{{task_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "超时任务 Top5 / Top5 Timeout Tasks",
+      "type": "timeseries",
+      "description": "超时速率最高的前 5 个任务 / Top 5 tasks by timeout increase rate."
+    },
+    {
+      "id": 903,
+      "type": "row",
+      "title": "③ 深入分析 / Analysis",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 8
       },
       "id": 3,
       "options": {
@@ -367,6 +723,62 @@
           "color": {
             "mode": "palette-classic"
           },
+          "unit": "suffix: 天",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 7
+              },
+              {
+                "color": "green",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 8
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "url_check_ssl_expiry_days{task_name=~\"$task\"}",
+          "legendFormat": "{{task_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "SSL 证书剩余天数 / SSL Expiry Days",
+      "type": "timeseries",
+      "description": "当前任务证书距离过期的剩余天数 / Remaining certificate validity days by task."
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -384,10 +796,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 44,
         "w": 12,
-        "x": 12,
-        "y": 12
+        "h": 8
       },
       "id": 4,
       "options": {
@@ -426,71 +838,15 @@
         "defaults": {
           "color": {
             "mode": "palette-classic"
-          },
-          "unit": "suffix: 天",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 7
-              },
-              {
-                "color": "green",
-                "value": 30
-              }
-            ]
           }
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 20
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "expr": "url_check_ssl_expiry_days{task_name=~\"$task\"}",
-          "legendFormat": "{{task_name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "SSL 证书剩余天数 / SSL Expiry Days",
-      "type": "timeseries",
-      "description": "当前任务证书距离过期的剩余天数 / Remaining certificate validity days by task."
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
-        "y": 20
+        "y": 44,
+        "w": 12,
+        "h": 8
       },
       "id": 6,
       "options": {
@@ -520,90 +876,15 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 28
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "expr": "topk(5, histogram_quantile(0.95, sum by (le, task_name) (rate(url_check_http_response_time_ms_bucket{task_name=~\"$task\"}[5m]))))",
-          "legendFormat": "{{task_name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "慢任务 Top5（P95） / Top5 Slow Tasks by P95",
-      "type": "timeseries",
-      "description": "响应时间 P95 最高的前 5 个任务 / Top 5 tasks with highest P95 response time."
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 28
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "expr": "topk(5, rate(url_check_http_timeout_total{task_name=~\"$task\"}[5m]))",
-          "legendFormat": "{{task_name}}",
-          "refId": "A"
-        }
-      ],
-      "title": "超时任务 Top5 / Top5 Timeout Tasks",
-      "type": "timeseries",
-      "description": "超时速率最高的前 5 个任务 / Top 5 tasks by timeout increase rate."
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
           "unit": "s"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
         "x": 0,
-        "y": 36
+        "y": 52,
+        "w": 24,
+        "h": 8
       },
       "id": 9,
       "options": {
@@ -674,6 +955,6 @@
   "timezone": "browser",
   "title": "URL 检查监控总览 / URL Check Monitoring Overview (Enhanced)",
   "uid": "url-check-basic",
-  "version": 2,
+  "version": 4,
   "weekStart": ""
 }
