@@ -1,11 +1,52 @@
-# config.py
-import sys, os
+"""Runtime configuration.
+
+Priority: environment variables > code defaults.
+Only URL_CHECK_* variables are supported.
+"""
+
+import os
+
+
+def _env_str(name, default=""):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    return value if value else default
+
+
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name, default=0):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value.strip())
+    except Exception:
+        return default
+
+
+def _env_list(name, default=None):
+    if default is None:
+        default = []
+    value = os.getenv(name)
+    if value is None:
+        return default
+    items = [x.strip() for x in value.split(",") if x.strip()]
+    return items if items else default
+
 
 mail_conf = "conf/mail.ini"  # 邮件程序使用的文件
 tasks_yaml = "conf/tasks.yaml"  # YAML 格式任务配置文件
 # 告警设置
-send_to = ["hewei@raiyee.com"]
-history_datat_day = 3
+send_to = _env_list("URL_CHECK_MAIL_RECEIVERS", ["ops@example.com"])
+history_datat_day = _env_int("URL_CHECK_HISTORY_DATA_DAYS", 3)
 
 # =============================================================================
 # 告警开关配置（兼容旧版）
@@ -38,9 +79,9 @@ history_datat_day = 3
 #     annotations:
 #       summary: "URL {{ $labels.task_name }} 检查失败"
 # =============================================================================
-enable_alerts = True  # 总开关（测试时开启）
-enable_dingding = True  # 钉钉告警开关
-enable_mail = False  # 邮件告警开关（默认关闭，需配置 mail.ini）
+enable_alerts = _env_bool("URL_CHECK_ENABLE_ALERTS", True)
+enable_dingding = _env_bool("URL_CHECK_ENABLE_DINGDING", True)
+enable_mail = _env_bool("URL_CHECK_ENABLE_MAIL", False)
 
 
 # =============================================================================
@@ -58,8 +99,10 @@ from conf.alerts_config import (
     ALERT_TYPE_MAP,
 )
 
-dingding_url = "https://oapi.dingtalk.com/robot/send?"
-access_token = "b4b5792b89a8dd4ac97e26194ed903cee523b11c4bd31fba87819e5cf1803d2b"
+dingding_url = _env_str(
+    "URL_CHECK_DINGDING_WEBHOOK", "https://oapi.dingtalk.com/robot/send?"
+)
+access_token = _env_str("URL_CHECK_DINGDING_ACCESS_TOKEN", "")
 
 # =============================================================================
 # 告警日志配置
@@ -82,8 +125,8 @@ access_token = "b4b5792b89a8dd4ac97e26194ed903cee523b11c4bd31fba87819e5cf1803d2b
 #   "message": "code:500, threshold:200 URL:https://..."
 # }
 # =============================================================================
-alert_log_enabled = True
-alert_log_retention_days = 30
+alert_log_enabled = _env_bool("URL_CHECK_ALERT_LOG_ENABLED", True)
+alert_log_retention_days = _env_int("URL_CHECK_ALERT_LOG_RETENTION_DAYS", 30)
 
 # =============================================================================
 # 定时汇总报告配置
@@ -105,7 +148,40 @@ alert_log_retention_days = 30
 #   True:  发送邮件汇总报告
 #   False: 不发送
 # =============================================================================
-report_enabled = True  # 默认开启
-report_interval_hours = 2  # 默认2小时
-report_dingding_enabled = True  # 钉钉汇总报告
-report_mail_enabled = False  # 邮件汇总报告
+report_enabled = _env_bool("URL_CHECK_REPORT_ENABLED", True)
+report_interval_hours = _env_int("URL_CHECK_REPORT_INTERVAL_HOURS", 2)
+report_dingding_enabled = _env_bool("URL_CHECK_REPORT_DINGDING_ENABLED", True)
+report_mail_enabled = _env_bool("URL_CHECK_REPORT_MAIL_ENABLED", False)
+
+
+def _masked(value):
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "***"
+    return value[:4] + "***" + value[-4:]
+
+
+def validate_config():
+    if enable_alerts and enable_dingding and not access_token:
+        print("[config] warning: URL_CHECK_DINGDING_ACCESS_TOKEN is empty")
+    if enable_alerts and enable_mail and not send_to:
+        print("[config] warning: URL_CHECK_MAIL_RECEIVERS is empty")
+
+
+def print_config_summary():
+    print(
+        "[config] alerts={} dingding={} mail={} report={} interval={}h receivers={} token={}".format(
+            enable_alerts,
+            enable_dingding,
+            enable_mail,
+            report_enabled,
+            report_interval_hours,
+            len(send_to),
+            _masked(access_token),
+        )
+    )
+
+
+validate_config()
+print_config_summary()

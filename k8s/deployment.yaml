@@ -33,18 +33,28 @@ spec:
           env:
             - name: FLASK_ENV
               value: "production"
-            - name: DINGDING_ACCESS_TOKEN
+            - name: URL_CHECK_DINGDING_ACCESS_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: url-check-secrets
                   key: dingding-access-token
                   optional: true
-            - name: MAIL_RECEIVER
+            - name: URL_CHECK_MAIL_RECEIVERS
               valueFrom:
                 secretKeyRef:
                   name: url-check-secrets
                   key: mail-receiver
                   optional: true
+            - name: URL_CHECK_ENABLE_ALERTS
+              value: "true"
+            - name: URL_CHECK_ENABLE_DINGDING
+              value: "true"
+            - name: URL_CHECK_ENABLE_MAIL
+              value: "false"
+            - name: URL_CHECK_REPORT_ENABLED
+              value: "true"
+            - name: URL_CHECK_REPORT_INTERVAL_HOURS
+              value: "2"
           resources:
             requests:
               memory: "64Mi"
@@ -261,13 +271,15 @@ data:
     mail_conf = "conf/mail.ini"
     tasks_yaml = "/home/appuser/conf/tasks.yaml"
     send_to = [
-        x.strip() for x in os.getenv("MAIL_RECEIVER", "").split(",") if x.strip()
+        x.strip()
+        for x in os.getenv("URL_CHECK_MAIL_RECEIVERS", "").split(",")
+        if x.strip()
     ] or ["ops@example.com"]
-    history_datat_day = 3
+    history_datat_day = int(os.getenv("URL_CHECK_HISTORY_DATA_DAYS", "3"))
 
-    enable_alerts = True
-    enable_dingding = True
-    enable_mail = False
+    enable_alerts = os.getenv("URL_CHECK_ENABLE_ALERTS", "true").lower() in {"1", "true", "yes", "on"}
+    enable_dingding = os.getenv("URL_CHECK_ENABLE_DINGDING", "true").lower() in {"1", "true", "yes", "on"}
+    enable_mail = os.getenv("URL_CHECK_ENABLE_MAIL", "false").lower() in {"1", "true", "yes", "on"}
 
     from conf.alerts_config import (
         is_alert_enabled,
@@ -278,13 +290,13 @@ data:
         ALERT_TYPE_MAP,
     )
 
-    dingding_url = "https://oapi.dingtalk.com/robot/send?"
-    access_token = os.getenv("DINGDING_ACCESS_TOKEN", "")
+    dingding_url = os.getenv("URL_CHECK_DINGDING_WEBHOOK", "https://oapi.dingtalk.com/robot/send?")
+    access_token = os.getenv("URL_CHECK_DINGDING_ACCESS_TOKEN", "")
 
-    alert_log_enabled = True
-    alert_log_retention_days = 30
+    alert_log_enabled = os.getenv("URL_CHECK_ALERT_LOG_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    alert_log_retention_days = int(os.getenv("URL_CHECK_ALERT_LOG_RETENTION_DAYS", "30"))
 
-    report_enabled = True
-    report_interval_hours = 2
-    report_dingding_enabled = True
-    report_mail_enabled = False
+    report_enabled = os.getenv("URL_CHECK_REPORT_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    report_interval_hours = int(os.getenv("URL_CHECK_REPORT_INTERVAL_HOURS", "2"))
+    report_dingding_enabled = os.getenv("URL_CHECK_REPORT_DINGDING_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+    report_mail_enabled = os.getenv("URL_CHECK_REPORT_MAIL_ENABLED", "false").lower() in {"1", "true", "yes", "on"}

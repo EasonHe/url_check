@@ -11,15 +11,16 @@ services:
     volumes:
       - ./conf:/home/appuser/conf:ro
       - ./logs:/home/appuser/logs
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Shanghai
       - FLASK_ENV=production
-      - DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
-      - MAIL_SMTP_SERVER=smtp.example.com
-      - MAIL_SMTP_PORT=465
-      - MAIL_SENDER=alert@example.com
-      - MAIL_SENDER_PASSWORD=YOUR_MAIL_PASSWORD
-      - MAIL_RECEIVER=admin@example.com
+      - URL_CHECK_ENABLE_ALERTS=true
+      - URL_CHECK_ENABLE_DINGDING=true
+      - URL_CHECK_ENABLE_MAIL=false
+      - URL_CHECK_REPORT_ENABLED=true
+      - URL_CHECK_REPORT_INTERVAL_HOURS=2
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health', timeout=2)"]
       interval: 30s

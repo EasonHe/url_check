@@ -185,12 +185,11 @@ services:
       - ./logs:/home/appuser/logs
     environment:
       - TZ=Asia/Shanghai
-      - DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
-      - MAIL_SMTP_SERVER=smtp.example.com
-      - MAIL_SMTP_PORT=465
-      - MAIL_SENDER=alert@example.com
-      - MAIL_SENDER_PASSWORD=password
-      - MAIL_RECEIVER=admin@example.com
+      - URL_CHECK_DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
+      - URL_CHECK_MAIL_RECEIVERS=admin@example.com
+      - URL_CHECK_ENABLE_ALERTS=true
+      - URL_CHECK_ENABLE_DINGDING=true
+      - URL_CHECK_ENABLE_MAIL=false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
@@ -455,8 +454,8 @@ enable_alerts = True
 enable_dingding = True
 enable_mail = False
 dingding_url = "https://oapi.dingtalk.com/robot/send?"
-access_token = "${DINGDING_ACCESS_TOKEN}"
-send_to = ["${MAIL_RECEIVER}"]
+access_token = "${URL_CHECK_DINGDING_ACCESS_TOKEN}"
+send_to = ["${URL_CHECK_MAIL_RECEIVERS}"]
 
 # 告警日志配置
 alert_log_enabled = True
@@ -467,12 +466,11 @@ alert_log_retention_days = 30
 
 | 配置项 | Docker 环境变量 | K8s Secret | 说明 |
 |--------|-----------------|------------|------|
-| 钉钉 Access Token | `DINGDING_ACCESS_TOKEN` | `dingding-access-token` | 钉钉机器人 access_token |
-| SMTP 服务器 | `MAIL_SMTP_SERVER` | `mail-smtp-server` | 邮件发送服务器 |
-| SMTP 端口 | `MAIL_SMTP_PORT` | - | 默认 465 |
-| 发件人 | `MAIL_SENDER` | `mail-sender` | 发件邮箱 |
-| 发件密码 | `MAIL_SENDER_PASSWORD` | `mail-sender-password` | 发件密码或授权码 |
-| 收件人 | `MAIL_RECEIVER` | `mail-receiver` | 告警接收邮箱 |
+| 钉钉 Access Token | `URL_CHECK_DINGDING_ACCESS_TOKEN` | `dingding-access-token` | 钉钉机器人 access_token |
+| 告警收件人 | `URL_CHECK_MAIL_RECEIVERS` | `mail-receiver` | 逗号分隔邮箱 |
+| 告警总开关 | `URL_CHECK_ENABLE_ALERTS` | - | true/false |
+| 钉钉开关 | `URL_CHECK_ENABLE_DINGDING` | - | true/false |
+| 邮件开关 | `URL_CHECK_ENABLE_MAIL` | - | true/false |
 
 ---
 
@@ -727,12 +725,11 @@ services:
       - ./logs:/home/appuser/logs
     environment:
       - TZ=Asia/Shanghai
-      - DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
-      - MAIL_SMTP_SERVER=smtp.example.com
-      - MAIL_SMTP_PORT=465
-      - MAIL_SENDER=alert@example.com
-      - MAIL_SENDER_PASSWORD=YOUR_MAIL_PASSWORD
-      - MAIL_RECEIVER=admin@example.com
+      - URL_CHECK_DINGDING_ACCESS_TOKEN=YOUR_DINGDING_ACCESS_TOKEN
+      - URL_CHECK_MAIL_RECEIVERS=admin@example.com
+      - URL_CHECK_ENABLE_ALERTS=true
+      - URL_CHECK_ENABLE_DINGDING=true
+      - URL_CHECK_ENABLE_MAIL=false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
@@ -798,27 +795,12 @@ spec:
           env:
             - name: FLASK_ENV
               value: "production"
-            - name: DINGDING_ACCESS_TOKEN
+            - name: URL_CHECK_DINGDING_ACCESS_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: url-check-secrets
                   key: dingding-access-token
-            - name: MAIL_SMTP_SERVER
-              valueFrom:
-                secretKeyRef:
-                  name: url-check-secrets
-                  key: mail-smtp-server
-            - name: MAIL_SENDER
-              valueFrom:
-                secretKeyRef:
-                  name: url-check-secrets
-                  key: mail-sender
-            - name: MAIL_SENDER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: url-check-secrets
-                  key: mail-sender-password
-            - name: MAIL_RECEIVER
+            - name: URL_CHECK_MAIL_RECEIVERS
               valueFrom:
                 secretKeyRef:
                   name: url-check-secrets
@@ -937,8 +919,8 @@ data:
     enable_dingding = True
     enable_mail = False
     dingding_url = "https://oapi.dingtalk.com/robot/send?"
-    access_token = "${DINGDING_ACCESS_TOKEN}"
-    send_to = ["${MAIL_RECEIVER}"]
+    access_token = "${URL_CHECK_DINGDING_ACCESS_TOKEN}"
+    send_to = ["${URL_CHECK_MAIL_RECEIVERS}"]
     alert_log_enabled = True
     alert_log_retention_days = 30
 ---

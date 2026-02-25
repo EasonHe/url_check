@@ -1,27 +1,64 @@
-# 与 conf/config.py 保持同名字段，复制后按需改值。
+"""Example runtime config.
+
+Copy to conf/config.py only if you do not want to use the repository default.
+Production deployments should prefer URL_CHECK_* environment variables.
+"""
+
+import os
+
+
+def _env_str(name, default=""):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    return value if value else default
+
+
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name, default=0):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value.strip())
+    except Exception:
+        return default
+
+
+def _env_list(name, default=None):
+    if default is None:
+        default = []
+    value = os.getenv(name)
+    if value is None:
+        return default
+    items = [x.strip() for x in value.split(",") if x.strip()]
+    return items if items else default
+
 
 mail_conf = "conf/mail.ini"
 tasks_yaml = "conf/tasks.yaml"
 
-# 告警接收邮箱（enable_mail=True 时生效）
-send_to = ["ops@example.com"]
-history_datat_day = 3
+send_to = _env_list("URL_CHECK_MAIL_RECEIVERS", ["ops@example.com"])
+history_datat_day = _env_int("URL_CHECK_HISTORY_DATA_DAYS", 3)
 
-# 告警总开关与渠道开关
-enable_alerts = True
-enable_dingding = True
-enable_mail = False
+enable_alerts = _env_bool("URL_CHECK_ENABLE_ALERTS", True)
+enable_dingding = _env_bool("URL_CHECK_ENABLE_DINGDING", True)
+enable_mail = _env_bool("URL_CHECK_ENABLE_MAIL", False)
 
-# 告警日志
-alert_log_enabled = True
-alert_log_retention_days = 30
+dingding_url = _env_str("URL_CHECK_DINGDING_WEBHOOK", "https://oapi.dingtalk.com/robot/send?")
+access_token = _env_str("URL_CHECK_DINGDING_ACCESS_TOKEN", "")
 
-# 钉钉机器人
-dingding_url = "https://oapi.dingtalk.com/robot/send?"
-access_token = "REPLACE_WITH_YOUR_DINGTALK_ACCESS_TOKEN"
+alert_log_enabled = _env_bool("URL_CHECK_ALERT_LOG_ENABLED", True)
+alert_log_retention_days = _env_int("URL_CHECK_ALERT_LOG_RETENTION_DAYS", 30)
 
-# 定时汇总报告
-report_enabled = True
-report_interval_hours = 2
-report_dingding_enabled = True
-report_mail_enabled = False
+report_enabled = _env_bool("URL_CHECK_REPORT_ENABLED", True)
+report_interval_hours = _env_int("URL_CHECK_REPORT_INTERVAL_HOURS", 2)
+report_dingding_enabled = _env_bool("URL_CHECK_REPORT_DINGDING_ENABLED", True)
+report_mail_enabled = _env_bool("URL_CHECK_REPORT_MAIL_ENABLED", False)

@@ -15,7 +15,7 @@ FROM python:3.14-slim-bookworm
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /home/appuser/.venv
 RUN sed -i 's|#!/opt/venv/bin/python|#!/home/appuser/.venv/bin/python|g' /home/appuser/.venv/bin/gunicorn /home/appuser/.venv/bin/gunicorn_paster /home/appuser/.venv/bin/futurize /home/appuser/.venv/bin/pasteaster 2>/dev/null || true
-COPY --chmod=755 url_check.py run.sh scheduler_runner.py gunicorn.conf.py test_alerts.py /home/appuser/
+COPY --chmod=755 url_check.py run.sh scheduler_runner.py gunicorn.conf.py /home/appuser/
 COPY conf/ /home/appuser/conf/
 COPY view/ /home/appuser/view/
 

@@ -165,15 +165,16 @@ retry:
 
 ### 告警配置
 
-支持两种配置方式：全局开关（旧版）或细粒度配置（新版）。
+运行时配置统一使用 `URL_CHECK_*` 环境变量，`conf/config.py` 仅提供默认值兜底。
 
-#### 全局开关（旧版，兼容）
+#### 全局开关（环境变量）
 
-```python
-# conf/config.py
-enable_alerts = True    # 总开关
-enable_dingding = True  # 钉钉开关
-enable_mail = False     # 邮件开关
+```bash
+URL_CHECK_ENABLE_ALERTS=true
+URL_CHECK_ENABLE_DINGDING=true
+URL_CHECK_ENABLE_MAIL=false
+URL_CHECK_DINGDING_ACCESS_TOKEN=REPLACE_WITH_TOKEN
+URL_CHECK_MAIL_RECEIVERS=ops@example.com
 ```
 
 #### 细粒度配置（新版，推荐）
@@ -216,15 +217,16 @@ alerts:
 | `enabled` | 是否启用该类型告警 |
 | `channels` | 通知渠道列表：`dingding` / `mail` |
 | `recover` | 是否发送恢复通知 |
+| `suppress_minutes` | 故障告警抑制窗口（分钟） |
 
 #### 工作模式
 
 | 模式 | 配置 |
 |------|------|
-| Prometheus 告警 | `enable_alerts = False` |
-| 仅钉钉 | `enable_alerts = True` + `channels: [dingding]` |
-| 仅邮件 | `enable_alerts = True` + `channels: [mail]` |
-| 全部渠道 | `enable_alerts = True` + `channels: [dingding, mail]` |
+| Prometheus 告警 | `URL_CHECK_ENABLE_ALERTS=false` |
+| 仅钉钉 | `URL_CHECK_ENABLE_ALERTS=true` + `channels: [dingding]` |
+| 仅邮件 | `URL_CHECK_ENABLE_ALERTS=true` + `channels: [mail]` |
+| 全部渠道 | `URL_CHECK_ENABLE_ALERTS=true` + `channels: [dingding, mail]` |
 
 ## Prometheus 指标
 
@@ -362,14 +364,11 @@ timeout:1 URL:https://api.example.com
 
 告警日志独立输出到 `logs/alert_YYYY-MM-DD.log`，JSON 格式，按天保留。
 
-#### 配置项 (conf/config.py)
+#### 配置项（环境变量）
 
-```python
-# 是否启用独立告警日志
-alert_log_enabled = True
-
-# 日志保留天数（0 表示不限制）
-alert_log_retention_days = 30
+```bash
+URL_CHECK_ALERT_LOG_ENABLED=true
+URL_CHECK_ALERT_LOG_RETENTION_DAYS=30
 ```
 
 #### 日志格式（JSON）
