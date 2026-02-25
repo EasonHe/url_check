@@ -143,6 +143,30 @@ url_check_content_match = Gauge(
     ["task_name", "method"],
 )
 
+url_check_status_code_alert = Gauge(
+    "url_check_status_code_alert",
+    "Status code alert state (1=alert, 0=normal)",
+    ["task_name", "method"],
+)
+
+url_check_timeout_alert = Gauge(
+    "url_check_timeout_alert",
+    "Timeout alert state (1=alert, 0=normal)",
+    ["task_name", "method"],
+)
+
+url_check_content_alert = Gauge(
+    "url_check_content_alert",
+    "Content alert state (1=alert, 0=normal)",
+    ["task_name", "method"],
+)
+
+url_check_json_path_alert = Gauge(
+    "url_check_json_path_alert",
+    "JSON path alert state (1=alert, 0=normal)",
+    ["task_name", "method"],
+)
+
 # 聚合指标（方便查看）
 url_check_success_total = Counter(
     "url_check_success_total",
@@ -173,6 +197,12 @@ url_check_ssl_verified = Counter(
     "url_check_ssl_verified",
     "SSL certificate verification status",
     ["task_name", "method", "verified"],
+)
+
+url_check_ssl_expiry_alert = Gauge(
+    "url_check_ssl_expiry_alert",
+    "SSL expiry alert state (1=alert, 0=normal)",
+    ["task_name", "method"],
 )
 
 
@@ -524,6 +554,29 @@ class cherker:
                 notified_alarm[code_key] = sent_state
 
         return notified_alarm
+
+    def _update_alert_state_metrics(self, method):
+        """更新判定后告警状态指标（1=告警，0=正常）"""
+        url_check_status_code_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(self.now_alarm.get("code_warm", 0))
+        url_check_timeout_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(self.now_alarm.get("timeout_warm", 0))
+        url_check_content_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(self.now_alarm.get("math_warm", 0))
+        url_check_json_path_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(self.now_alarm.get("json_warm", 0))
+        url_check_ssl_expiry_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(self.now_alarm.get("ssl_warm", 0))
 
     def first_run_task(self, status_data, threshold, time, datafile):
         """
@@ -973,6 +1026,28 @@ class cherker:
             # print(temp_dict)
             with open(datafile, "wb") as f:
                 pickle.dump(temp_dict, f)
+
+        # 判定后告警状态指标（1=告警，0=正常）
+        url_check_status_code_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(status_data[self.task_name].get("stat_code", 0))
+        url_check_timeout_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(status_data[self.task_name].get("timeout", 0))
+        url_check_content_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(status_data[self.task_name].get("stat_math_str", 0))
+        url_check_json_path_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(status_data[self.task_name].get("json_warm", 0))
+        url_check_ssl_expiry_alert.labels(
+            task_name=self.task_name,
+            method=method,
+        ).set(status_data[self.task_name].get("ssl_warm", 0))
 
         # ==========================================================================
         # 更新 Prometheus 聚合指标（兼容旧版）
