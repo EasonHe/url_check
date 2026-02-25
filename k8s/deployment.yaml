@@ -124,7 +124,7 @@ data:
         interval: 60
         threshold:
           stat_code: 200
-          delay: [300, 2]
+          delay: 300
           math_str: ""
         max_response_size: 1048576  # 1MB
         ssl:
@@ -142,7 +142,7 @@ data:
         interval: 60
         threshold:
           stat_code: 200
-          delay: [500, 2]
+          delay: 500
           math_str: ""
         max_response_size: 524288  # 512KB
         ssl:
@@ -157,7 +157,7 @@ data:
         interval: 60
         threshold:
           stat_code: 200
-          delay: [1000, 3]
+          delay: 1000
         retry:
           count: 3       # 重试3次
           delay: 2        # 每次间隔2秒
@@ -174,7 +174,7 @@ data:
         interval: 300
         threshold:
           stat_code: 200
-          delay: [2000, 2]
+          delay: 2000
         proxy: http://127.0.0.1:7890  # 代理地址
 
       # 任务5：内网服务（跳过 SSL 验证）
@@ -185,7 +185,7 @@ data:
         interval: 60
         threshold:
           stat_code: 200
-          delay: [1000, 2]
+          delay: 1000
         ssl:
           verify: false  # 跳过 SSL 验证（内网私有证书）
           warning_days: 0  # 不检查证书有效期

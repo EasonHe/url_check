@@ -98,7 +98,7 @@ tasks:
     interval: 60
     threshold:
       stat_code: 200
-      delay: [300, 2]
+      delay: 300
       math_str: "百度"
     ssl:
       verify: true
@@ -172,7 +172,7 @@ tasks:
 | 字段 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
 | `stat_code` | 否 | 200 | 期望状态码 |
-| `delay` | 否 | - | `[最大响应时间(毫秒), 连续超次次数]` |
+| `delay` | 否 | - | 最大响应时间阈值(毫秒) |
 | `math_str` | 否 | - | 期望包含的关键字 |
 
 ### JSON 验证配置

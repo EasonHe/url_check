@@ -106,7 +106,7 @@ tasks:
     interval: 60
     threshold:
       stat_code: 200
-      delay: [300, 2]
+      delay: 300
       math_str: "百度"
     ssl:
       verify: true
@@ -327,7 +327,7 @@ tasks:
     interval: 60
     threshold:
       stat_code: 200
-      delay: [300, 2]
+      delay: 300
       math_str: "百度"
     ssl:
       verify: true
@@ -398,7 +398,7 @@ proxy: http://__HOST__:7890
 | 字段 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
 | `stat_code` | 否 | 200 | 期望状态码 |
-| `delay` | 否 | - | `[最大响应时间(毫秒), 连续超次次数]` |
+| `delay` | 否 | - | 最大响应时间阈值(毫秒) |
 | `math_str` | 否 | - | 期望包含的关键字 |
 
 ### JSON 验证配置
@@ -509,7 +509,7 @@ tasks:
     interval: 60
     threshold:
       stat_code: 200
-      delay: [300, 2]
+      delay: 300
       math_str: "百度"
     max_response_size: 1048576
     ssl:
@@ -526,7 +526,7 @@ tasks:
     interval: 30
     threshold:
       stat_code: 200
-      delay: [500, 2]
+      delay: 500
     expect_json: true
     json_path: "$.status"
     json_path_value: "active"
@@ -551,7 +551,7 @@ tasks:
       delay: 2
     threshold:
       stat_code: 200
-      delay: [1000, 2]
+      delay: 1000
     ssl:
       verify: true
       warning_days: 30
@@ -566,7 +566,7 @@ tasks:
     interval: 300
     threshold:
       stat_code: 200
-      delay: [2000, 2]
+      delay: 2000
     proxy: http://__HOST__:7890
     ssl:
       verify: true
@@ -582,7 +582,7 @@ tasks:
     interval: 60
     threshold:
       stat_code: 200
-      delay: [1000, 2]
+      delay: 1000
     ssl:
       verify: false
       warning_days: 0
@@ -617,7 +617,7 @@ tasks:
     interval: 60
     threshold:
       stat_code: 200
-      delay: [500, 2]
+      delay: 500
     expect_json: true
     json_path: "$.id"
     json_path_value: "123"
@@ -638,7 +638,7 @@ tasks:
     interval: 120
     threshold:
       stat_code: 200
-      delay: [1000, 2]
+      delay: 1000
       math_str: "success"
     ssl:
       verify: true
@@ -654,7 +654,7 @@ tasks:
     interval: 3600
     threshold:
       stat_code: 200
-      delay: [3000, 1]
+      delay: 3000
     ssl:
       verify: true
       warning_days: 14
@@ -888,7 +888,7 @@ data:
         interval: 60
         threshold:
           stat_code: 200
-          delay: [300, 2]
+          delay: 300
           math_str: "百度"
         ssl:
           verify: true
