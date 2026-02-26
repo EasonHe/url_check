@@ -159,7 +159,6 @@ docker run -d \
   --name url-check \
   --env-file .env \
   -p 4000:4000 \
-  -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf \
   -v $(pwd)/logs:/home/appuser/logs \
   -e TZ=Asia/Shanghai \
@@ -180,7 +179,6 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-      - "9090:9090"
     volumes:
       - ./conf:/home/appuser/conf:ro
       - ./logs:/home/appuser/logs
@@ -218,7 +216,6 @@ docker pull easonhe/url-checker:latest
 docker run -d \
   --name url-check \
   -p 4000:4000 \
-  -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf \
   easonhe/url-checker:latest
 ```
@@ -461,7 +458,6 @@ alerts:
 # Flask 配置
 host = "0.0.0.0"
 port = 4000
-metrics_port = 9090
 
 # 任务配置
 tasks_yaml = "/home/appuser/conf/tasks.yaml"
@@ -702,7 +698,6 @@ alerts:
 # Flask 配置
 host = "0.0.0.0"
 port = 4000
-metrics_port = 9090
 
 # 任务配置
 tasks_yaml = "/home/appuser/conf/tasks.yaml"
@@ -736,7 +731,6 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-      - "9090:9090"
     volumes:
       - ./conf:/home/appuser/conf:ro
       - ./logs:/home/appuser/logs
@@ -797,7 +791,7 @@ spec:
       annotations:
         configmap.reloader.stakater.com/reload: "url-check-tasks"
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
+        prometheus.io/port: "4000"
         prometheus.io/path: "/metrics"
     spec:
       containers:
@@ -807,8 +801,6 @@ spec:
           ports:
             - containerPort: 4000
               name: http
-            - containerPort: 9090
-              name: metrics
           env:
             - name: FLASK_ENV
               value: "production"
@@ -930,7 +922,6 @@ data:
   config.py: |
     host = "0.0.0.0"
     port = 4000
-    metrics_port = 9090
     tasks_yaml = "/home/appuser/conf/tasks.yaml"
     enable_alerts = True
     enable_dingding = True
@@ -953,9 +944,6 @@ spec:
     - port: 4000
       targetPort: 4000
       name: http
-    - port: 9090
-      targetPort: 9090
-      name: metrics
   selector:
     app: url-check
 ---
@@ -1007,7 +995,7 @@ kubectl get pods -n url-check -l app=url-check
 kubectl exec -n url-check -it $(kubectl get pod -n url-check -l app=url-check -o jsonpath='{.items[0].metadata.name}') -- curl -f http://localhost:4000/health
 
 # 端口转发（本地测试）
-kubectl port-forward -n url-check svc/url-check 4000:4000 9090:9090
+kubectl port-forward -n url-check svc/url-check 4000:4000
 
 # 访问服务
 curl http://localhost:4000/health
@@ -1264,7 +1252,7 @@ rate(url_check_http_timeout_total[5m])
 
 ```bash
 # 启动
-docker run -d --name url-check -p 4000:4000 -p 9090:9090 -v $(pwd)/conf:/home/appuser/conf easonhe/url-checker:latest
+docker run -d --name url-check -p 4000:4000 -v $(pwd)/conf:/home/appuser/conf easonhe/url-checker:latest
 
 # 停止
 docker stop url-check
@@ -1298,7 +1286,7 @@ kubectl set image deployment/url-check url-check=easonhe/url-checker:latest -n u
 kubectl rollout undo deployment/url-check -n url-check
 
 # 端口转发
-kubectl port-forward -n url-check svc/url-check 4000:4000 9090:9090
+kubectl port-forward -n url-check svc/url-check 4000:4000
 
 # 查看配置
 kubectl get configmap -n url-check
