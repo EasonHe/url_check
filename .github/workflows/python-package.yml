@@ -41,3 +41,6 @@ jobs:
     - name: Alert regression checks
       run: |
         python scripts/qa/alert_regression.py
+    - name: Docs guard checks
+      run: |
+        python scripts/qa/docs_guard.py
