@@ -1,15 +1,9 @@
 def post_fork(worker, log):
-    """Reinitialize scheduler after fork."""
+    """Initialize scheduler in worker process after fork."""
     import sys
 
     sys.path.insert(0, "/home/appuser")
-    from view.make_check_instan import load_config
-    from url_check import app
+    from url_check import _init_scheduler
 
-    # Reinitialize scheduler in worker process
-    lt = load_config()
-    lt.loading_task()
-
-    # Store in app context
-    app.scheduler_instance = lt
+    _init_scheduler(force=True)
     print(f"Scheduler reinitialized in worker {worker.pid}")

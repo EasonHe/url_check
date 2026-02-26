@@ -41,24 +41,32 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 app = Flask(__name__)
 
-# Global scheduler instance (initialized lazily or by post_fork hook)
-scheduler_instance = None
+
+def _init_scheduler(force=False):
+    """Initialize scheduler and attach it to Flask app context."""
+    existing = getattr(app, "scheduler_instance", None)
+    if not force and existing is not None:
+        return existing
+
+    lt = load_config()
+    lt.loading_task()
+
+    from conf import config
+    from view.make_check_instan import add_report_job
+
+    if config.report_enabled:
+        add_report_job(lt.sched, interval_hours=config.report_interval_hours)
+
+    setattr(app, "scheduler_instance", lt)
+    return lt
 
 
 def _get_scheduler():
-    """Get the scheduler instance, initializing if necessary."""
-    global scheduler_instance
-    if scheduler_instance is None:
-        lt = load_config()
-        lt.loading_task()
-        scheduler_instance = lt
-
-        from conf import config
-        from view.make_check_instan import add_report_job
-
-        if config.report_enabled:
-            add_report_job(lt.sched, interval_hours=config.report_interval_hours)
-    return scheduler_instance
+    """Get scheduler instance from app context, creating it lazily if needed."""
+    scheduler = getattr(app, "scheduler_instance", None)
+    if scheduler is None:
+        scheduler = _init_scheduler()
+    return scheduler
 
 
 @app.route("/sender/mail", methods=["POST"])
@@ -97,6 +105,7 @@ def task_opt():
             "start_sched": 1
         }
     """
+    data = {}
     if request.method == "POST":
         data = request.get_json() or {}
 

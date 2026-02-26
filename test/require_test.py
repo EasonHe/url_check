@@ -1,59 +1,68 @@
-# -*- coding: utf-8 -*-
-from apscheduler.schedulers.blocking import BlockingScheduler
-import json
-
-import  requests
-from requests import exceptions
-
-def hello():
-    print('hello')
-
-def job():
-    try:
-        headers = {'Content-Type':'application/x-www-form-urlencoded','openid':'YXazYNOQ1UtdFCINYJ5QyrqA2QVu6qWmoi5zBJBAV69P3AeH8EVmGCwCf5IKbzDK'}
-        name = 'hejiating'
-        payload = {'searchType':0 ,'programType':0, 'productId':0,'content':1122}
-        data = {}
-
-        r = requests.post("https://andhejiating.js.chinamobile.com/afuos-wechat-api/vod/search-content",headers=headers,data=payload,timeout=10)
-        r.encoding = 'utf-8'
-        retime = r.elapsed.microseconds/1000
-        statuscode = r.status_code
-
-        data = {'url_name': name,'statuscode':statuscode,'resp_time': retime,'contents':r.text}
-        print(data)
-
-    except  exceptions.ConnectTimeout:
-        data = {'url_name':name,'erro': 'timeout'}
-        print(data)
+import datetime
 
 
-    except exceptions.TooManyRedirects:
-        print (TooManyRedirects)
+def _payload(task_name, code=200, timeout=0, content="ok"):
+    return {
+        "url_name": task_name,
+        "url": "https://example.local/health",
+        "stat_code": code,
+        "timeout": timeout,
+        "resp_time": 20,
+        "contents": content,
+        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "threshold": {"stat_code": 200, "math_str": "ok"},
+        "expect_json": False,
+        "json_path": None,
+        "json_path_value": None,
+    }
 
 
+def test_health_endpoint_ok():
+    from url_check import app
 
-def get():
-    try:
-        headers = {'Content-Type':'application/x-www-form-urlencoded','openid':'YXazYNOQ1UtdFCINYJ5QyrqA2QVu6qWmoi5zBJBAV69P3AeH8EVmGCwCf5IKbzDK'}
-        name = 'baidu.com'
-        payload = {'searchType':0 ,'programType':0, 'productId':0,'content':1122}
-        data = {}
-
-        r = requests.get("https://www.baidu.com",data=None,timeout=10,headers=None)
-        r.encoding = 'utf-8'
-        retime = r.elapsed.microseconds/1000
-        statuscode = r.status_code
-
-        data = {'url_name': name,'statuscode':statuscode,'resp_time': retime,'contents':r.text}
-        print(data)
-
-    except  exceptions.ConnectTimeout:
-        data = {'url_name':name,'erro': 'timeout'}
-        print(data)
+    client = app.test_client()
+    resp = client.get("/health")
+    payload = resp.get_json(force=True)
+    assert resp.status_code == 200
+    assert payload["status"] == "ok"
 
 
-    except exceptions.TooManyRedirects:
-        print (TooManyRedirects)
+def test_alert_metrics_still_emit_when_state_save_fails(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
 
-get()
+    from conf import config
+    from view.checke_control import cherker, url_check_status_code_alert
+
+    config.enable_alerts = False
+    config.enable_dingding = False
+    config.enable_mail = False
+
+    def _save_fail(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr("view.checke_control._save_state_data", _save_fail)
+
+    task_name = "unit-alert-save-fail"
+    checker = cherker(method="get")
+    checker.make_data(_payload(task_name, code=503, timeout=0, content="bad"))
+
+    metric = url_check_status_code_alert.labels(task_name=task_name, method="get")
+    assert metric._value.get() == 1.0
+
+
+def test_state_dir_created_on_first_run(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+
+    from conf import config
+    from view.checke_control import cherker
+
+    config.enable_alerts = False
+    config.enable_dingding = False
+    config.enable_mail = False
+
+    task_name = "unit-create-state-dir"
+    checker = cherker(method="get")
+    checker.make_data(_payload(task_name, code=200, timeout=0, content="ok"))
+
+    assert (tmp_path / "data").exists()
+    assert (tmp_path / "data" / f"{task_name}.pkl").exists()

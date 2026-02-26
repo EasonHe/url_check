@@ -18,12 +18,47 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 ALERT_LOG_DIR = "logs"
 ALERT_LOG_FILE = os.path.join(ALERT_LOG_DIR, "alert.log")
+STATE_DIR = "data"
 
 
 def _ensure_log_dir():
     """确保日志目录存在"""
     if not os.path.exists(ALERT_LOG_DIR):
         os.makedirs(ALERT_LOG_DIR, exist_ok=True)
+
+
+def _ensure_state_dir():
+    """确保运行状态目录存在。"""
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        return True
+    except Exception as e:
+        logger.warning(f"创建状态目录失败 {STATE_DIR}: {e}")
+        return False
+
+
+def _load_state_data(datafile):
+    """读取任务状态文件，失败时返回空字典。"""
+    try:
+        with open(datafile, "rb") as f:
+            return pickle.load(f)
+    except Exception as e:
+        logger.warning(f"读取状态文件失败 {datafile}: {e}")
+        return {}
+
+
+def _save_state_data(datafile, payload):
+    """写入任务状态文件，失败时仅记录日志。"""
+    if not _ensure_state_dir():
+        return False
+
+    try:
+        with open(datafile, "wb") as f:
+            pickle.dump(payload, f)
+        return True
+    except Exception as e:
+        logger.warning(f"写入状态文件失败 {datafile}: {e}")
+        return False
 
 
 def _get_log_filename():
@@ -653,8 +688,7 @@ class cherker:
         temp_dict[time.split()[0]] = [(status_data)]
         # print(temp_dict)
 
-        with open(datafile, "wb") as f:
-            pickle.dump(temp_dict, f)
+        if _save_state_data(datafile, temp_dict):
             print("写入完毕")
 
     def make_data(self, data_dict):
@@ -908,7 +942,8 @@ class cherker:
         # ==========================================================================
 
         # 根据任务分类，才不会出现io 冲突
-        datafile = "data/{}.pkl".format(self.task_name)  # 文件名字
+        _ensure_state_dir()
+        datafile = os.path.join(STATE_DIR, "{}.pkl".format(self.task_name))  # 文件名字
         # 一开始设计状态都是好的，生成一个现在的状态和之前的状态，两个对比，发出故障警告或者恢复警告
         # 第一次运行的时候没有文件，那么先生成文件并存入数据
 
@@ -916,9 +951,10 @@ class cherker:
             self.first_run_task(status_data, threshold, time, datafile)
 
         else:
-            f = open(datafile, "rb")
-            temp_dict = pickle.load(f)
-            f.close()
+            temp_dict = _load_state_data(datafile)
+            if not isinstance(temp_dict, dict):
+                logger.warning(f"状态文件格式异常，使用默认状态: {datafile}")
+                temp_dict = {}
             self.last_alert_time = temp_dict.get("last_alert_time", {})
             self.last_resp_time = temp_dict.get("last_resp_time")
             # 保留时间数目
@@ -1024,8 +1060,7 @@ class cherker:
                 self.now_alarm,
             )
             # print(temp_dict)
-            with open(datafile, "wb") as f:
-                pickle.dump(temp_dict, f)
+            _save_state_data(datafile, temp_dict)
 
         # 判定后告警状态指标（1=告警，0=正常）
         url_check_status_code_alert.labels(
