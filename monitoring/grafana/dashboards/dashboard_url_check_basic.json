@@ -25,8 +25,8 @@
     {
       "id": 201,
       "type": "stat",
-      "title": "全局拨测成功率 / Global Probe Success Rate",
-      "description": "拨测失败定义：状态码不匹配或超时。1 个任务失败记为 0%，正常记为 100%。",
+      "title": "全局检查成功率（5m） / Global Check Success Rate (5m)",
+      "description": "基于 url_check_task_checks_total 计算最近 5 分钟成功率，避免告警空样本造成无数据。",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -40,7 +40,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * avg(1 - clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"}, 1))"
+          "expr": "100 * sum(increase(url_check_task_checks_total{task_name=~\"$task\",result=\"success\"}[5m])) / clamp_min(sum(increase(url_check_task_checks_total{task_name=~\"$task\"}[5m])), 1)"
         }
       ],
       "fieldConfig": {
@@ -88,8 +88,8 @@
     {
       "id": 202,
       "type": "stat",
-      "title": "当前拨测失败任务数 / Current Failed Tasks",
-      "description": "失败任务 = 状态码不匹配 或 超时（去重后计数）。",
+      "title": "当前失败任务数（全维度） / Current Failed Tasks (All Reasons)",
+      "description": "按状态码/超时/关键字/JSON/SSL 告警态去重统计当前失败任务数。",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -103,7 +103,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"}, 1))"
+          "expr": "sum(clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"} + url_check_content_alert{task_name=~\"$task\"} + url_check_json_path_alert{task_name=~\"$task\"} + url_check_ssl_expiry_alert{task_name=~\"$task\"}, 1))"
         }
       ],
       "fieldConfig": {
@@ -252,14 +252,14 @@
       },
       "targets": [
         {
-          "expr": "count((url_check_http_timeout_total{task_name=~\"$task\"}) > 0)",
+          "expr": "count(url_check_timeout_alert{task_name=~\"$task\"} == 1)",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "超时任务数 / Timeout Tasks",
+      "title": "超时告警任务数 / Timeout Alert Tasks",
       "type": "stat",
-      "description": "出现过超时的任务数量 / Tasks with timeout occurrences."
+      "description": "当前处于超时告警态的任务数量。"
     },
     {
       "datasource": {
@@ -307,14 +307,14 @@
       },
       "targets": [
         {
-          "expr": "count(url_check_http_status_code{task_name=~\"$task\"})",
+          "expr": "max(url_check_scheduler_job_count)",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "任务总数 / Total Tasks",
+      "title": "调度任务总数 / Scheduler Job Count",
       "type": "stat",
-      "description": "当前被采集到的任务数量 / Number of tasks currently scraped."
+      "description": "调度器当前加载任务数（全局）。"
     },
     {
       "datasource": {
@@ -331,12 +331,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 0.01
+                "color": "green",
+                "value": 1
               },
               {
                 "color": "red",
@@ -370,20 +370,20 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(url_check_http_timeout_total{task_name=~\"$task\"}[5m]))",
+          "expr": "max(url_check_scheduler_up)",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "5分钟超时增长速率（次/秒，总览） / Timeout Growth Rate (5m, per second, Overview)",
+      "title": "调度器状态 / Scheduler Up",
       "type": "stat",
-      "description": "基于 rate(url_check_http_timeout_total[5m])，表示超时计数器每秒增长量，不是5分钟总次数。"
+      "description": "调度器运行状态：1=运行，0=停止。"
     },
     {
       "id": 204,
       "type": "bargauge",
-      "title": "失败原因拆分 / Failure Reason Breakdown",
-      "description": "按当前任务状态统计失败原因数量。",
+      "title": "最近30分钟失败原因分布 / Failure Reasons (30m)",
+      "description": "基于失败分类计数器统计最近 30 分钟失败原因。",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -397,13 +397,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(url_check_timeout_alert{task_name=~\"$task\"})",
-          "legendFormat": "超时 / Timeout"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(url_check_status_code_alert{task_name=~\"$task\"})",
-          "legendFormat": "状态码不匹配 / Status Mismatch"
+          "expr": "sum by (reason) (increase(url_check_task_failures_total{task_name=~\"$task\"}[30m]))",
+          "legendFormat": "{{reason}}"
         }
       ],
       "fieldConfig": {
@@ -447,8 +442,8 @@
     {
       "id": 203,
       "type": "timeseries",
-      "title": "按任务拨测成功率（%） / Probe Success Rate by Task",
-      "description": "每个任务实时成功率：100%（成功）或 0%（失败）。失败定义同上。",
+      "title": "按任务检查成功率（5m） / Success Rate by Task (5m)",
+      "description": "按任务维度统计最近 5 分钟成功率。",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -462,7 +457,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * (1 - clamp_max(url_check_status_code_alert{task_name=~\"$task\"} + url_check_timeout_alert{task_name=~\"$task\"}, 1))",
+          "expr": "100 * sum by (task_name) (increase(url_check_task_checks_total{task_name=~\"$task\",result=\"success\"}[5m])) / clamp_min(sum by (task_name) (increase(url_check_task_checks_total{task_name=~\"$task\"}[5m])), 1)",
           "legendFormat": "{{task_name}}"
         }
       ],
@@ -578,14 +573,14 @@
       },
       "targets": [
         {
-          "expr": "rate(url_check_http_timeout_total{task_name=~\"$task\"}[5m])",
+          "expr": "sum by (task_name) (increase(url_check_task_failures_total{task_name=~\"$task\",reason=\"timeout\"}[5m]))",
           "legendFormat": "{{task_name}}",
           "refId": "A"
         }
       ],
-      "title": "5分钟超时增长速率（次/秒） / Timeout Growth Rate (5m, per second)",
+      "title": "5分钟超时失败次数 / Timeout Failures (5m)",
       "type": "timeseries",
-      "description": "基于 rate(url_check_http_timeout_total[5m])，表示超时计数器每秒增长量，不是5分钟总次数。"
+      "description": "按任务统计最近 5 分钟超时失败累计次数。"
     },
     {
       "datasource": {
@@ -653,14 +648,14 @@
       },
       "targets": [
         {
-          "expr": "topk(5, rate(url_check_http_timeout_total{task_name=~\"$task\"}[5m]))",
+          "expr": "topk(5, sum by (task_name) (increase(url_check_task_failures_total{task_name=~\"$task\",reason=\"timeout\"}[30m])))",
           "legendFormat": "{{task_name}}",
           "refId": "A"
         }
       ],
-      "title": "超时任务 Top5 / Top5 Timeout Tasks",
+      "title": "超时失败 Top5（30m） / Top5 Timeout Failures (30m)",
       "type": "timeseries",
-      "description": "超时速率最高的前 5 个任务 / Top 5 tasks by timeout increase rate."
+      "description": "最近 30 分钟超时失败最多的 5 个任务。"
     },
     {
       "id": 903,
@@ -760,14 +755,14 @@
       },
       "targets": [
         {
+          "refId": "A",
           "expr": "url_check_ssl_expiry_days{task_name=~\"$task\"}",
-          "legendFormat": "{{task_name}}",
-          "refId": "A"
+          "legendFormat": "{{task_name}}"
         }
       ],
       "title": "SSL 证书剩余天数 / SSL Expiry Days",
       "type": "timeseries",
-      "description": "当前任务证书距离过期的剩余天数 / Remaining certificate validity days by task."
+      "description": "按任务展示 SSL 证书剩余有效天数。"
     },
     {
       "datasource": {
@@ -857,14 +852,19 @@
       },
       "targets": [
         {
-          "expr": "rate(url_check_success_total{task_name=~\"$task\"}[5m])",
-          "legendFormat": "{{task_name}} 状态码/Code={{status_code}}",
-          "refId": "A"
+          "refId": "A",
+          "expr": "sum by (task_name) (rate(url_check_task_checks_total{task_name=~\"$task\",result=\"success\"}[5m]))",
+          "legendFormat": "{{task_name}} success"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (task_name) (rate(url_check_task_checks_total{task_name=~\"$task\",result=\"failed\"}[5m]))",
+          "legendFormat": "{{task_name}} failed"
         }
       ],
-      "title": "按状态码统计检查速率（5分钟） / Check Rate by Status Code (5m)",
+      "title": "任务检查速率（成功/失败） / Check Throughput by Result (5m)",
       "type": "timeseries",
-      "description": "按任务与状态码分组的检查速率 / Check rate grouped by task and status code."
+      "description": "按任务展示检查速率，区分成功与失败。"
     },
     {
       "datasource": {
