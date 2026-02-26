@@ -12,32 +12,117 @@
 | Standalone | `url-check` | 内置钉钉/邮件 | 不想部署 Prometheus 的团队 |
 | Prometheus | `url-check` + Prometheus | PromQL/Alertmanager（可与内置并存） | 统一监控平台团队 |
 
-## Docker 部署
+## 容器部署（Docker vs Docker Compose）
 
-### 1) 准备配置
+`docker run` 和 `docker compose` 是两种不同交付方式：
+
+| 方式 | 适用场景 | 特点 |
+|------|----------|------|
+| Docker（`docker run`） | 单实例、快速验证、脚本化控制 | 命令显式、改参数需重建容器 |
+| Docker Compose（`docker compose`） | 长期运行、多服务编排、团队协作 | 配置文件化、可复用、便于版本管理 |
+
+### A) Docker（`docker run`）详细部署
+
+#### 1) 准备配置
 
 ```bash
 cp .env.example .env
 cp conf/tasks.yaml.example conf/tasks.yaml
 cp conf/alerts.yaml.example conf/alerts.yaml
+mkdir -p logs
 ```
 
-### 2) 启动服务
+#### 2) 构建镜像
 
-推荐直接使用仓库中的 `docker-compose.yml`：
+```bash
+docker build -t easonhe/url-checker:latest .
+```
+
+#### 3) 启动容器
+
+```bash
+docker run -d \
+  --name url-check \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 4000:4000 \
+  -v $(pwd)/conf:/home/appuser/conf:ro \
+  -v $(pwd)/logs:/home/appuser/logs \
+  easonhe/url-checker:latest
+```
+
+#### 4) 验证
+
+```bash
+docker ps --filter name=url-check
+curl http://127.0.0.1:4000/health
+curl http://127.0.0.1:4000/metrics
+docker logs --since 5m url-check
+```
+
+#### 5) 常用运维命令（docker run 模式）
+
+```bash
+# 重启
+docker restart url-check
+
+# 修改配置后重建
+docker rm -f url-check
+docker run -d ... # 使用上面的启动命令重建
+
+# 升级镜像
+docker pull easonhe/url-checker:latest
+docker rm -f url-check
+docker run -d ... # 使用新镜像重建
+```
+
+### B) Docker Compose（`docker compose`）详细部署
+
+#### 1) 准备配置
+
+```bash
+cp .env.example .env
+cp conf/tasks.yaml.example conf/tasks.yaml
+cp conf/alerts.yaml.example conf/alerts.yaml
+mkdir -p logs
+```
+
+#### 2) 启动服务
+
+使用仓库内 `docker-compose.yml`：
 
 ```bash
 docker build -t easonhe/url-checker:latest .
 docker compose up -d
-docker compose logs -f
 ```
 
-### 3) 验证
+#### 3) 验证
 
 ```bash
+docker compose ps
 curl http://127.0.0.1:4000/health
 curl http://127.0.0.1:4000/metrics
-docker ps --filter name=url-check
+docker compose logs --since 5m url-check
+```
+
+#### 4) 常用运维命令（compose 模式）
+
+```bash
+# 重启单服务
+docker compose restart url-check
+
+# 修改配置后重建
+docker compose up -d --force-recreate url-check
+
+# 停止/清理
+docker compose down
+```
+
+#### 5) 升级镜像（compose 模式）
+
+```bash
+docker compose pull
+docker compose up -d --force-recreate
 ```
 
 ## Kubernetes 部署
@@ -101,7 +186,16 @@ docker compose -f monitoring/docker-compose.monitoring.yml up -d
 
 ## 回滚与升级
 
-### Docker
+### Docker（docker run）
+
+```bash
+# 回滚到指定 tag
+docker pull easonhe/url-checker:<tag>
+docker rm -f url-check
+docker run -d ... easonhe/url-checker:<tag>
+```
+
+### Docker Compose
 
 ```bash
 docker compose pull
