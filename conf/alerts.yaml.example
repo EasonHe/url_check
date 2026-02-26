@@ -1,45 +1,51 @@
-# 告警配置示例（与 conf/alerts.yaml 字段保持一致）
-# name 可选值:
-#   - status_code
-#   - timeout
-#   - content_match
-#   - json_path
-#   - delay
-#   - ssl_expiry
+# alerts.yaml 示例
+#
+# 字段说明：
+# - name: 告警类型（status_code/timeout/content_match/json_path/delay/ssl_expiry）
+# - enabled: 是否启用该告警类型
+# - channels: 通知渠道（dingding, mail）
+# - recover: 是否发送恢复通知
+# - suppress_minutes: 抑制窗口，窗口内重复故障不重复通知
 
 alerts:
+  # 状态码异常（建议双通道）
   - name: status_code
     enabled: true
     channels: [dingding, mail]
     recover: true
     suppress_minutes: 5
 
+  # 超时异常（建议至少钉钉）
   - name: timeout
     enabled: true
     channels: [dingding]
     recover: true
     suppress_minutes: 5
 
+  # 内容匹配失败
   - name: content_match
     enabled: true
     channels: [dingding, mail]
     recover: true
     suppress_minutes: 5
 
+  # JSON Path 匹配失败
   - name: json_path
     enabled: true
     channels: [dingding, mail]
     recover: true
     suppress_minutes: 5
 
+  # 响应时间超阈值
   - name: delay
     enabled: true
     channels: [dingding]
     recover: true
     suppress_minutes: 5
 
+  # SSL 到期预警
   - name: ssl_expiry
     enabled: true
     channels: [dingding]
     recover: true
-    suppress_minutes: 5
+    suppress_minutes: 30

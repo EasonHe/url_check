@@ -66,6 +66,12 @@ docker logs --since 10m url-check
 - 检查 `url_check_config_tasks_total` 是否变化。
 - 本地模式确认热重载线程是否启动，容器模式检查是否重建/重启。
 
+### 现象 5：应用内告警一直不发送
+
+- 检查 `.env` 中 `URL_CHECK_ENABLE_ALERTS` 是否为 `true`。
+- 检查渠道开关：`URL_CHECK_ENABLE_DINGDING` / `URL_CHECK_ENABLE_MAIL`。
+- 检查 `conf/alerts.yaml` 对应 `name` 是否 `enabled=true` 且包含目标 `channels`。
+
 ## 推荐看板
 
 - 成功率：`100 * avg(url_check_http_status_code == bool 200)`
@@ -74,3 +80,8 @@ docker logs --since 10m url-check
 - 关键字失败：`sum(url_check_content_match == bool 0)`
 - 调度器状态：`url_check_scheduler_up`
 - 任务总数：`url_check_scheduler_job_count`
+
+## 配置排障速查
+
+- 字段定义与默认值：`docs/config-reference.md`
+- 运行模式开关：`docs/run-modes.md`

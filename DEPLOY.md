@@ -135,6 +135,7 @@ kubectl -n url-check rollout undo deployment/url-check
 
 - `README.md`
 - `docs/run-modes.md`
+- `docs/config-reference.md`
 - `docs/metrics.md`
 - `docs/observability.md`
 - `docs/ALERT_TESTING.md`

@@ -21,6 +21,8 @@ URL_CHECK_DINGDING_ACCESS_TOKEN=REPLACE_ME
 URL_CHECK_MAIL_RECEIVERS=ops@example.com
 ```
 
+适合：希望快速落地，不额外维护 Prometheus/Alertmanager。
+
 ## Prometheus 推荐配置
 
 ```bash
@@ -29,6 +31,8 @@ URL_CHECK_ENABLE_ALERTS=false
 URL_CHECK_ENABLE_DINGDING=false
 URL_CHECK_ENABLE_MAIL=false
 ```
+
+适合：告警统一由 Prometheus/Alertmanager 管理，应用仅上报指标。
 
 ## 启动方式
 
@@ -51,3 +55,5 @@ docker compose -f monitoring/docker-compose.monitoring.yml up -d
 curl http://127.0.0.1:4000/health
 curl http://127.0.0.1:4000/metrics
 ```
+
+更多字段说明见 `docs/config-reference.md`。

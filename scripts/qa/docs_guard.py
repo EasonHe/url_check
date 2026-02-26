@@ -7,6 +7,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
+CONFIG_REF = ROOT / "docs" / "config-reference.md"
 
 
 def markdown_files():
@@ -48,6 +49,33 @@ def main():
             for m in pattern.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
                 errors.append(f"{md.relative_to(ROOT)}:{line} [{name}] {help_msg}")
+
+    if not CONFIG_REF.exists():
+        errors.append(
+            "docs/config-reference.md:1 [missing_config_reference] Config reference file is required."
+        )
+    else:
+        text = CONFIG_REF.read_text(encoding="utf-8")
+        required_tokens = [
+            "conf/tasks.yaml",
+            "conf/alerts.yaml",
+            "URL_CHECK_ENABLE_ALERTS",
+            "suppress_minutes",
+            "json_path_value",
+        ]
+        for token in required_tokens:
+            if token not in text:
+                errors.append(
+                    f"docs/config-reference.md:1 [config_reference_incomplete] Missing required token: {token}"
+                )
+
+    readme = ROOT / "README.md"
+    if readme.exists():
+        readme_text = readme.read_text(encoding="utf-8")
+        if "docs/config-reference.md" not in readme_text:
+            errors.append(
+                "README.md:1 [missing_config_ref_link] README should link docs/config-reference.md."
+            )
 
     if errors:
         print("docs_guard found issues:")

@@ -1,10 +1,24 @@
-# 任务配置示例
-# - production-* 为线上常规监控示例（应长期稳定）
-# - test-* 为告警联调示例（含故意不匹配配置）
+# tasks.yaml 示例
+#
+# 使用建议：
+# 1) 最先启用「最小可用模板」验证链路。
+# 2) 再启用「生产推荐模板」覆盖核心能力。
+# 3) 联调模板仅用于告警验证，不建议长期留在生产配置。
 
 tasks:
   # ---------------------------------------------------------------------------
-  # 线上示例任务
+  # A. 最小可用模板（Minimal）
+  # ---------------------------------------------------------------------------
+  - name: minimal-health
+    method: get
+    url: https://httpbin.org/get
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 200
+
+  # ---------------------------------------------------------------------------
+  # B. 生产推荐模板（Production）
   # ---------------------------------------------------------------------------
   - name: production-homepage
     method: get
@@ -18,6 +32,9 @@ tasks:
     ssl:
       verify: true
       warning_days: 30
+    retry:
+      count: 2
+      delay: 1
 
   - name: production-json-health
     method: get
@@ -33,6 +50,18 @@ tasks:
       verify: true
       warning_days: 30
 
+  - name: production-post-api
+    method: post
+    url: https://httpbin.org/post
+    timeout: 10
+    interval: 120
+    headers:
+      Content-Type: application/json
+    payload: '{"name":"url-check"}'
+    threshold:
+      stat_code: 200
+      delay: 1500
+
   - name: production-via-proxy
     method: get
     url: https://httpbin.org/get
@@ -43,26 +72,26 @@ tasks:
       delay: 2000
     # 代理地址示例：
     # - 本机运行：proxy: http://127.0.0.1:7890
-    # - 容器运行：proxy: http://__HOST__:7890  (会替换为 host.docker.internal)
+    # - 容器运行：proxy: http://__HOST__:7890（自动替换为 host.docker.internal）
     proxy: http://__HOST__:7890
     ssl:
       verify: true
       warning_days: 30
 
   # ---------------------------------------------------------------------------
-  # 联调示例任务（故意不匹配）
+  # C. 联调模板（Debug，仅用于验证告警）
   # ---------------------------------------------------------------------------
-  - name: test-keyword-alert
+  - name: debug-keyword-alert
     method: get
     url: https://httpbin.org/json
     timeout: 10
     interval: 30
     threshold:
       stat_code: 200
-      # 故意配置不存在关键字，用于验证 content_match 故障告警
+      # 故意配置不存在关键字，用于验证 content_match 告警
       math_str: "NON_EXISTENT_KEYWORD_XYZ"
 
-  - name: test-jsonpath-alert
+  - name: debug-jsonpath-alert
     method: get
     url: https://httpbin.org/json
     timeout: 10
@@ -71,10 +100,10 @@ tasks:
       stat_code: 200
     expect_json: true
     json_path: "$.slideshow.author"
-    # 故意配置错误值，用于验证 json_path 故障告警
+    # 故意配置错误值，用于验证 json_path 告警
     json_path_value: "WRONG_AUTHOR_NAME"
 
-  - name: test-timeout-alert
+  - name: debug-timeout-alert
     method: get
     url: https://httpbin.org/delay/10
     timeout: 3
@@ -82,7 +111,7 @@ tasks:
     threshold:
       stat_code: 200
 
-  - name: test-delay-alert
+  - name: debug-delay-alert
     method: get
     url: https://httpbin.org/delay/2
     timeout: 10
