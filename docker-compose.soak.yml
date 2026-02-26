@@ -1,0 +1,19 @@
+services:
+  url-check:
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - mkdir -p /home/appuser/data && exec /home/appuser/run.sh
+    environment:
+      - URL_CHECK_ENABLE_ALERTS=true
+      - URL_CHECK_ENABLE_DINGDING=false
+      - URL_CHECK_ENABLE_MAIL=false
+    tmpfs:
+      - /home/appuser/data:uid=1000,gid=1000,mode=0775
+    networks:
+      - default
+      - monitoring_net
+
+networks:
+  monitoring_net:
+    external: true

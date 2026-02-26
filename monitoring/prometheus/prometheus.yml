@@ -5,7 +5,7 @@ scrape_configs:
   - job_name: 'url-check'
     metrics_path: /metrics
     static_configs:
-      - targets: ['host.docker.internal:4000']
+      - targets: ['url-check:4000']
 
   - job_name: 'prometheus'
     static_configs:
