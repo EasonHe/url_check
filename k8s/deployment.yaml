@@ -18,7 +18,7 @@ spec:
       annotations:
         configmap.reloader.stakater.com/reload: "url-check-tasks,url-check-alerts,url-check-config"
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
+        prometheus.io/port: "4000"
         prometheus.io/path: "/metrics"
     spec:
       containers:
@@ -28,8 +28,6 @@ spec:
           ports:
             - containerPort: 4000
               name: http
-            - containerPort: 9090
-              name: metrics
           env:
             - name: FLASK_ENV
               value: "production"

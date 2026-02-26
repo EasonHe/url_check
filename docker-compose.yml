@@ -7,7 +7,6 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-      - "9090:9090"
     volumes:
       - ./conf:/home/appuser/conf:ro
       - ./logs:/home/appuser/logs

@@ -60,7 +60,6 @@ docker run -d \
   --name url-check \
   --env-file .env \
   -p 4000:4000 \
-  -p 9090:9090 \
   -v $(pwd)/conf:/home/appuser/conf:ro \
   -v $(pwd)/logs:/home/appuser/logs \
   easonhe/url-checker:latest
