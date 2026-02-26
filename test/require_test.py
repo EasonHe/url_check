@@ -25,6 +25,8 @@ def test_health_endpoint_ok():
     payload = resp.get_json(force=True)
     assert resp.status_code == 200
     assert payload["status"] == "ok"
+    assert "scheduler" in payload
+    assert {"initialized", "running", "jobs"}.issubset(payload["scheduler"].keys())
 
 
 def test_alert_metrics_still_emit_when_state_save_fails(monkeypatch, tmp_path):

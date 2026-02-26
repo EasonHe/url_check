@@ -36,10 +36,29 @@ API 端点：
 from flask import Flask, request
 from view.mail_server import geturl
 from view.make_check_instan import load_config
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Gauge, Info
 
 
 app = Flask(__name__)
+
+service_runtime_info = Info("url_check_service_info", "Service runtime info")
+service_runtime_info.info({"service": "url-check", "port": "4000"})
+
+scheduler_init_total = Counter(
+    "url_check_scheduler_init_total",
+    "Total number of scheduler initialization attempts",
+    ["result"],
+)
+
+scheduler_up = Gauge(
+    "url_check_scheduler_up",
+    "Scheduler running state (1=running, 0=stopped)",
+)
+
+scheduler_job_count = Gauge(
+    "url_check_scheduler_job_count",
+    "Current scheduler job count",
+)
 
 
 def _init_scheduler(force=False):
@@ -48,8 +67,13 @@ def _init_scheduler(force=False):
     if not force and existing is not None:
         return existing
 
-    lt = load_config()
-    lt.loading_task()
+    try:
+        lt = load_config()
+        lt.loading_task()
+    except Exception:
+        scheduler_init_total.labels(result="error").inc()
+        scheduler_up.set(0)
+        raise
 
     from conf import config
     from view.make_check_instan import add_report_job
@@ -58,7 +82,32 @@ def _init_scheduler(force=False):
         add_report_job(lt.sched, interval_hours=config.report_interval_hours)
 
     setattr(app, "scheduler_instance", lt)
+    scheduler_init_total.labels(result="ok").inc()
+    scheduler_up.set(1)
+    scheduler_job_count.set(len(lt.get_jobs()))
     return lt
+
+
+def _scheduler_snapshot():
+    scheduler = getattr(app, "scheduler_instance", None)
+    if scheduler is None:
+        scheduler_up.set(0)
+        scheduler_job_count.set(0)
+        return {
+            "initialized": False,
+            "running": False,
+            "jobs": 0,
+        }
+
+    running = bool(getattr(getattr(scheduler, "sched", None), "running", False))
+    jobs = len(scheduler.get_jobs())
+    scheduler_up.set(1 if running else 0)
+    scheduler_job_count.set(jobs)
+    return {
+        "initialized": True,
+        "running": running,
+        "jobs": jobs,
+    }
 
 
 def _get_scheduler():
@@ -140,6 +189,8 @@ def task_opt():
         if "shut_sched" in data and data["shut_sched"] == 1:
             try:
                 _get_scheduler().shut_sched()
+                scheduler_up.set(0)
+                scheduler_job_count.set(0)
             except Exception as e:
                 return "{}".format(e)
 
@@ -153,7 +204,9 @@ def task_opt():
         # 启动调度器
         if "start_sched" in data and data["start_sched"] == 1:
             _get_scheduler().start_sched()
+            _scheduler_snapshot()
 
+        _scheduler_snapshot()
         return "ok"
     return "{} False".format(data)
 
@@ -170,7 +223,13 @@ def health():
     Returns:
         JSON: 服务状态信息
     """
-    return {"status": "ok", "flask": "2.3.3", "uv": "0.9.28"}
+    sched = _scheduler_snapshot()
+    return {
+        "status": "ok",
+        "flask": "2.3.3",
+        "uv": "0.9.28",
+        "scheduler": sched,
+    }
 
 
 @app.route("/metrics")

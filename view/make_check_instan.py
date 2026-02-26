@@ -31,9 +31,21 @@ import time
 import ssl
 import socket
 from urllib.parse import urlparse
+from prometheus_client import Counter, Gauge
 
 # 全局 Session 用于连接池复用
 http_session = requests.Session()
+
+url_check_config_reload_total = Counter(
+    "url_check_config_reload_total",
+    "Total number of config reload attempts",
+    ["result"],
+)
+
+url_check_config_tasks_total = Gauge(
+    "url_check_config_tasks_total",
+    "Current configured task count after latest load/reload",
+)
 
 
 def get_ssl_cert_expiry_days(url, verify=True):
@@ -457,6 +469,7 @@ class load_config:
     def __init__(self):
         with open(config.tasks_yaml, "r", encoding="utf-8") as f:
             self.tasks = yaml.safe_load(f)
+        url_check_config_tasks_total.set(len(self.tasks.get("tasks", [])))
 
         from apscheduler.executors.pool import ThreadPoolExecutor
 
@@ -597,6 +610,7 @@ class load_config:
         for task in task_list:
             self.add_task(task=task)
         self.sched.start()
+        url_check_config_tasks_total.set(len(task_list))
         print("start")
 
     def get_jobs(self):
@@ -659,10 +673,12 @@ class load_config:
                 new_tasks = yaml.safe_load(f)
         except Exception as e:
             logger.error(f"配置文件解析失败: {e}")
+            url_check_config_reload_total.labels(result="parse_error").inc()
             return False
 
         if not hasattr(self, "tasks"):
             logger.warning("tasks 未初始化，跳过重载")
+            url_check_config_reload_total.labels(result="uninitialized").inc()
             return False
 
         old_task_names = set(t.get("name") for t in self.tasks.get("tasks", []))
@@ -676,6 +692,7 @@ class load_config:
                     logger.info(f"已移除任务: {name}")
             except Exception as e:
                 logger.error(f"移除任务 {name} 失败: {e}")
+                url_check_config_reload_total.labels(result="remove_error").inc()
 
         for task in new_tasks.get("tasks", []):
             try:
@@ -687,9 +704,12 @@ class load_config:
                 logger.info(f"已更新任务: {name}")
             except Exception as e:
                 logger.error(f"任务 {name} 加载失败: {e}")
+                url_check_config_reload_total.labels(result="task_error").inc()
                 continue
 
         self.tasks = new_tasks
+        url_check_config_tasks_total.set(len(new_tasks.get("tasks", [])))
+        url_check_config_reload_total.labels(result="ok").inc()
         return True
 
     def start_sched(self):

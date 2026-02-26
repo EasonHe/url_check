@@ -10,6 +10,12 @@
 curl -f http://127.0.0.1:4000/health
 ```
 
+期望最少包含：
+- `status=ok`
+- `scheduler.initialized`
+- `scheduler.running`
+- `scheduler.jobs`
+
 2. 指标是否输出
 
 ```bash
@@ -26,6 +32,8 @@ curl -s http://127.0.0.1:9091/api/v1/targets?state=active
 
 ```bash
 curl -s 'http://127.0.0.1:9091/api/v1/query?query=count(url_check_http_status_code)'
+curl -s 'http://127.0.0.1:9091/api/v1/query?query=url_check_scheduler_up'
+curl -s 'http://127.0.0.1:9091/api/v1/query?query=url_check_scheduler_job_count'
 ```
 
 5. 查看应用日志
@@ -52,9 +60,17 @@ docker logs --since 10m url-check
 - 检查 `conf/tasks.yaml` 解析错误。
 - 检查网络（Prometheus 是否能访问 `url-check:4000`）。
 
+### 现象 4：配置改了但任务数量没变化
+
+- 检查 `url_check_config_reload_total` 中 `result=ok` 是否增长。
+- 检查 `url_check_config_tasks_total` 是否变化。
+- 本地模式确认热重载线程是否启动，容器模式检查是否重建/重启。
+
 ## 推荐看板
 
 - 成功率：`100 * avg(url_check_http_status_code == bool 200)`
 - 失败任务数：`sum(url_check_http_status_code != bool 200)`
 - 超时趋势：`sum(increase(url_check_http_timeout_total[5m]))`
 - 关键字失败：`sum(url_check_content_match == bool 0)`
+- 调度器状态：`url_check_scheduler_up`
+- 任务总数：`url_check_scheduler_job_count`

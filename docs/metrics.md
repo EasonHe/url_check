@@ -17,6 +17,13 @@
 | `url_check_content_alert` | Gauge | `task_name`,`method` | 0/1 | 关键字告警态 |
 | `url_check_json_path_alert` | Gauge | `task_name`,`method` | 0/1 | JSON Path 告警态 |
 | `url_check_ssl_expiry_alert` | Gauge | `task_name`,`method` | 0/1 | SSL 到期告警态 |
+| `url_check_task_checks_total` | Counter | `task_name`,`method`,`result` | count | 检查总次数（success/failed） |
+| `url_check_task_failures_total` | Counter | `task_name`,`method`,`reason` | count | 失败分类累计 |
+| `url_check_scheduler_init_total` | Counter | `result` | count | 调度器初始化次数 |
+| `url_check_scheduler_up` | Gauge | - | 0/1 | 调度器运行状态 |
+| `url_check_scheduler_job_count` | Gauge | - | count | 当前任务数 |
+| `url_check_config_reload_total` | Counter | `result` | count | 配置热重载结果统计 |
+| `url_check_config_tasks_total` | Gauge | - | count | 当前配置任务总数 |
 
 ## 关于 `*_alert` 空样本
 
@@ -39,6 +46,12 @@ histogram_quantile(0.95, sum(rate(url_check_http_response_time_ms_bucket[5m])) b
 
 # 告警健康度（你的面板公式）
 100 * avg(1 - clamp_max(url_check_status_code_alert + url_check_timeout_alert, 1))
+
+# 失败原因 TopN
+topk(5, sum by (reason) (increase(url_check_task_failures_total[30m])))
+
+# 最近 10 分钟配置重载失败次数
+sum(increase(url_check_config_reload_total{result!="ok"}[10m]))
 ```
 
 ## 快速检查命令

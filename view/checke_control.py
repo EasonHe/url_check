@@ -240,6 +240,18 @@ url_check_ssl_expiry_alert = Gauge(
     ["task_name", "method"],
 )
 
+url_check_task_checks_total = Counter(
+    "url_check_task_checks_total",
+    "Total number of task checks by final result",
+    ["task_name", "method", "result"],
+)
+
+url_check_task_failures_total = Counter(
+    "url_check_task_failures_total",
+    "Total number of task check failures by reason",
+    ["task_name", "method", "reason"],
+)
+
 
 class cherker:
     def __init__(
@@ -1083,6 +1095,40 @@ class cherker:
             task_name=self.task_name,
             method=method,
         ).set(status_data[self.task_name].get("ssl_warm", 0))
+
+        status_warm = status_data[self.task_name].get("stat_code", 0)
+        timeout_warm = status_data[self.task_name].get("timeout", 0)
+        content_warm = status_data[self.task_name].get("stat_math_str", 0)
+        json_warm = status_data[self.task_name].get("json_warm", 0)
+        delay_warm = status_data[self.task_name].get("stat_delay", 0)
+        ssl_warm = status_data[self.task_name].get("ssl_warm", 0)
+
+        failed_reasons = []
+        if status_warm == 1:
+            failed_reasons.append("status_code")
+        if timeout_warm == 1:
+            failed_reasons.append("timeout")
+        if content_warm == 1:
+            failed_reasons.append("content")
+        if json_warm == 1:
+            failed_reasons.append("json_path")
+        if delay_warm == 1:
+            failed_reasons.append("delay")
+        if ssl_warm == 1:
+            failed_reasons.append("ssl_expiry")
+
+        result = "success" if not failed_reasons else "failed"
+        url_check_task_checks_total.labels(
+            task_name=self.task_name,
+            method=method,
+            result=result,
+        ).inc()
+        for reason in failed_reasons:
+            url_check_task_failures_total.labels(
+                task_name=self.task_name,
+                method=method,
+                reason=reason,
+            ).inc()
 
         # ==========================================================================
         # 更新 Prometheus 聚合指标（兼容旧版）
