@@ -441,9 +441,9 @@
     },
     {
       "id": 203,
-      "type": "timeseries",
-      "title": "按任务检查成功率（5m） / Success Rate by Task (5m)",
-      "description": "按任务维度统计最近 5 分钟成功率。",
+      "type": "table",
+      "title": "告警矩阵（任务 x 告警类型） / Alert Matrix (Task x Alert)",
+      "description": "按任务展示实时告警状态：1=告警，0=正常。默认过滤 production-*。",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -457,43 +457,89 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum by (task_name) (increase(url_check_task_checks_total{task_name=~\"$task\",result=\"success\"}[5m])) / clamp_min(sum by (task_name) (increase(url_check_task_checks_total{task_name=~\"$task\"}[5m])), 1)",
-          "legendFormat": "{{task_name}}"
+          "expr": "label_replace(url_check_status_code_alert{task_name=~\"$task\"}, \"alert_type\", \"status_code\", \"\", \"\") or label_replace(url_check_timeout_alert{task_name=~\"$task\"}, \"alert_type\", \"timeout\", \"\", \"\") or label_replace(url_check_content_alert{task_name=~\"$task\"}, \"alert_type\", \"content\", \"\", \"\") or label_replace(url_check_json_path_alert{task_name=~\"$task\"}, \"alert_type\", \"json_path\", \"\", \"\") or label_replace(url_check_ssl_expiry_alert{task_name=~\"$task\"}, \"alert_type\", \"ssl_expiry\", \"\", \"\") or label_replace(url_check_delay_alert{task_name=~\"$task\"}, \"alert_type\", \"delay\", \"\", \"\")",
+          "legendFormat": "{{task_name}} {{alert_type}}",
+          "instant": true
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "decimals": 0,
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
+                "color": "red",
+                "value": 1
               }
             ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK"
+                },
+                "1": {
+                  "text": "ALERT"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            }
           }
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false
+        },
+        "sortBy": [
+          {
+            "displayName": "task",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "rowField": "task_name",
+            "columnField": "alert_type",
+            "valueField": "Value"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "task_name": "task"
+            }
+          }
         }
-      }
+      ]
     },
     {
       "id": 902,
@@ -905,7 +951,7 @@
       "description": "当前时刻到该任务最近一次指标更新时间的间隔 / Seconds since last metric update per task."
     }
   ],
-  "refresh": "15s",
+  "refresh": "10s",
   "schemaVersion": 39,
   "style": "dark",
   "tags": [

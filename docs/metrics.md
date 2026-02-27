@@ -17,6 +17,7 @@
 | `url_check_content_alert` | Gauge | `task_name`,`method` | 0/1 | 关键字告警态 |
 | `url_check_json_path_alert` | Gauge | `task_name`,`method` | 0/1 | JSON Path 告警态 |
 | `url_check_ssl_expiry_alert` | Gauge | `task_name`,`method` | 0/1 | SSL 到期告警态 |
+| `url_check_delay_alert` | Gauge | `task_name`,`method` | 0/1 | 响应时间告警态 |
 | `url_check_task_checks_total` | Counter | `task_name`,`method`,`result` | count | 检查总次数（success/failed） |
 | `url_check_task_failures_total` | Counter | `task_name`,`method`,`reason` | count | 失败分类累计 |
 | `url_check_scheduler_init_total` | Counter | `result` | count | 调度器初始化次数 |
@@ -46,6 +47,14 @@ histogram_quantile(0.95, sum(rate(url_check_http_response_time_ms_bucket[5m])) b
 
 # 告警健康度（你的面板公式）
 100 * avg(1 - clamp_max(url_check_status_code_alert + url_check_timeout_alert, 1))
+
+# 告警矩阵（任务 x 告警类型）
+label_replace(url_check_status_code_alert, "alert_type", "status_code", "", "")
+or label_replace(url_check_timeout_alert, "alert_type", "timeout", "", "")
+or label_replace(url_check_content_alert, "alert_type", "content", "", "")
+or label_replace(url_check_json_path_alert, "alert_type", "json_path", "", "")
+or label_replace(url_check_ssl_expiry_alert, "alert_type", "ssl_expiry", "", "")
+or label_replace(url_check_delay_alert, "alert_type", "delay", "", "")
 
 # 失败原因 TopN
 topk(5, sum by (reason) (increase(url_check_task_failures_total[30m])))
