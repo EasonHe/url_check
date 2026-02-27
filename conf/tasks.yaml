@@ -1,101 +1,36 @@
-# =============================================================================
-# URL 检查任务配置文件 - 完整测试配置
-# =============================================================================
-
 tasks:
-  # ============ 1. SSL证书过期检查测试 ============
-  - name: test-ssl-expiry-check
+  - name: production-baidu-home
     method: get
     url: https://www.baidu.com
     timeout: 10
-    interval: 30
+    interval: 60
     threshold:
       stat_code: 200
-    ssl:
-      verify: true
-      warning_days: 9999
-
-  # ============ 2. 跳过证书验证测试 ============
-  - name: test-ssl-skip-verify
-    method: get
-    url: https://self-signed.badssl.com
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
-    ssl:
-      verify: false
-      warning_days: 30
-
-  # ============ 3. 状态码告警测试 ============
-  - name: test-status-code-alert
-    method: get
-    url: https://httpbin.org/status/503
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
+      delay: 3000
     ssl:
       verify: true
       warning_days: 30
 
-  # ============ 4. 超时告警测试 ============
-  - name: test-timeout-alert
+  - name: production-github-home
     method: get
-    url: https://httpbin.org/delay/10
-    timeout: 3
-    interval: 30
+    url: https://github.com
+    timeout: 10
+    interval: 60
     threshold:
       stat_code: 200
+      delay: 3000
+    ssl:
+      verify: true
+      warning_days: 30
 
-  # ============ 5. 关键字匹配告警测试 ============
-  - name: test-keyword-alert
+  - name: production-httpbin-json
     method: get
     url: https://httpbin.org/json
     timeout: 10
-    interval: 30
+    interval: 60
     threshold:
       stat_code: 200
-      math_str: "NON_EXISTENT_KEYWORD_XYZ"
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # ============ 6. JSON路径匹配告警测试 ============
-  - name: test-jsonpath-alert
-    method: get
-    url: https://httpbin.org/json
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
-    expect_json: true
-    json_path: "$.slideshow.author"
-    json_path_value: "WRONG_AUTHOR_NAME"
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # ============ 7. 响应时间告警测试 ============
-  - name: test-delay-alert
-    method: get
-    url: https://httpbin.org/delay/2
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
-      delay: 300
-
-  # ============ 8. 综合测试任务 ============
-  - name: test-comprehensive
-    method: get
-    url: https://httpbin.org/json
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
-      math_str: "slideshow"
-      delay: 500
+      delay: 3000
     expect_json: true
     json_path: "$.slideshow.author"
     json_path_value: "Yours Truly"
@@ -103,66 +38,17 @@ tasks:
       verify: true
       warning_days: 30
 
-  # ============ 9. 综合测试-超时场景 ============
-  - name: test-comprehensive-timeout
+  - name: production-github-status
     method: get
-    url: https://httpbin.org/delay/10
-    timeout: 3
-    interval: 30
-    threshold:
-      stat_code: 200
-      math_str: "slideshow"
-    expect_json: true
-    json_path: "$.slideshow.author"
-    json_path_value: "Yours Truly"
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # ============ 10. 综合测试-关键字场景 ============
-  - name: test-comprehensive-keyword
-    method: get
-    url: https://httpbin.org/json
+    url: https://www.githubstatus.com/api/v2/status.json
     timeout: 10
-    interval: 30
+    interval: 60
     threshold:
       stat_code: 200
-      math_str: "NON_EXISTENT_KEYWORD_XYZ"
+      delay: 3000
     expect_json: true
-    json_path: "$.slideshow.author"
-    json_path_value: "Yours Truly"
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # ============ 11. 综合测试-状态码场景 ============
-  - name: test-comprehensive-status
-    method: get
-    url: https://httpbin.org/status/503
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
-      math_str: "slideshow"
-    expect_json: true
-    json_path: "$.slideshow.author"
-    json_path_value: "Yours Truly"
-    ssl:
-      verify: true
-      warning_days: 30
-
-  # ============ 12. 综合测试-JSON路径场景 ============
-  - name: test-comprehensive-jsonpath
-    method: get
-    url: https://httpbin.org/json
-    timeout: 10
-    interval: 30
-    threshold:
-      stat_code: 200
-      math_str: "slideshow"
-    expect_json: true
-    json_path: "$.slideshow.author"
-    json_path_value: "WRONG_AUTHOR"
+    json_path: "$.status.indicator"
+    json_path_value: "none"
     ssl:
       verify: true
       warning_days: 30
