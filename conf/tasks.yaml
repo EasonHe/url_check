@@ -52,3 +52,12 @@ tasks:
     ssl:
       verify: true
       warning_days: 30
+
+  - name: production-openwrt-luci
+    method: get
+    url: http://192.168.8.1/cgi-bin/luci/
+    timeout: 10
+    interval: 60
+    threshold:
+      stat_code: 403
+      delay: 3000
