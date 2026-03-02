@@ -110,5 +110,5 @@ python3 -m pytest -q
 python3 scripts/qa/alert_regression.py
 python3 scripts/qa/docs_guard.py
 ```
-##grafana show dashboard
+## grafana show dashboard
 <img width="3514" height="2064" alt="image" src="https://github.com/user-attachments/assets/fcff1598-3d22-4441-b92e-0e9beabf7861" />
